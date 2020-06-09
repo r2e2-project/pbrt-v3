@@ -125,6 +125,7 @@
 #include <map>
 #include <stdio.h>
 #include <fstream>
+#include <string>
 
 namespace pbrt {
 
@@ -1794,9 +1795,18 @@ void pbrtProxy(const std::string &name) {
 
     std::shared_ptr<Primitive> proxy = CreateProxy(name);
 
+    const char *xEnv = getenv("TRANSLATE_X");
+    const char *zEnv = getenv("TRANSLATE_Z");
+    Transform translateHack {};
+    if (xEnv && zEnv) {
+        float transX = (float)std::stol(xEnv);
+        float transZ = (float)std::stol(zEnv);
+        translateHack = Translate(Vector3f(transX, 0.f, transZ));
+    }
+
     Transform *InstanceToWorld[2] = {
-        transformCache.Lookup(curTransform[0]),
-        transformCache.Lookup(curTransform[1])
+        transformCache.Lookup(translateHack * curTransform[0]),
+        transformCache.Lookup(translateHack * curTransform[1])
     };
 
     AnimatedTransform animatedInstanceToWorld(

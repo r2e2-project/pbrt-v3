@@ -8,20 +8,12 @@
 #include "geometry.h"
 #include "accelerators/cloud.h"
 #include <pbrt/main.h>
+#include <dirent.h>
 
 using namespace std;
+using namespace pbrt;
 
-int main(int argc, char* argv[])
-{
-  if (argc < 3) {
-      cerr << "Usage: gen-static0 SCENE STATIC0" << endl;
-      return EXIT_FAILURE;
-  }
-
-  const string path { argv[1] };
-
-  ofstream static0(argv[2]);
-
+void surfaceArea(const string &path, ofstream &static0) {
   pbrt::PbrtOptions.nThreads = 1;
   pbrt::scene::Base base(path, 1);
 
@@ -82,6 +74,40 @@ int main(int argc, char* argv[])
               areaHeuristic << endl;
 
       static0 << areaHeuristic << " " << 1 << " " << treeletIdx << endl;
+  }
+}
+
+void randomRays(const string &path, ofstream &static0) {
+    DIR *dir = opendir(path.c_str());
+    if (!dir) {
+        cerr << "Can't open " << path << endl;
+        exit(EXIT_FAILURE);
+    }
+
+    dirent *entry = nullptr;
+    while ((entry = readdir(dir))) {
+        if (entry->d_name[0] != 'B') continue;
+        printf("%s\n", entry->d_name);
+    }
+
+    closedir(dir);
+}
+
+int main(int argc, char* argv[])
+{
+  if (argc < 4) {
+      cerr << "Usage: gen-static0 CMD SCENE STATIC0" << endl;
+      return EXIT_FAILURE;
+  }
+
+  const string cmd { argv[1] };
+  const string path { argv[2] };
+  ofstream static0(argv[3]);
+
+  if (cmd == "SAH") {
+      surfaceArea(path, static0);
+  } else {
+      randomRays(path, static0);
   }
 
   return EXIT_SUCCESS;

@@ -29,6 +29,7 @@ int main(int argc, char *argv[]) {
     auto sceneReader = mgr.GetReader(ObjectType::Scene);
     sceneReader->read(&sceneProto);
     Bounds3f root = from_protobuf(sceneProto.world_bound());
+    cout << root << endl;
 
     header.write(reinterpret_cast<char *>(&root), sizeof(Bounds3f));
 
