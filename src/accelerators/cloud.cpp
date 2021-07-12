@@ -102,7 +102,7 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all)
 
         for (size_t i = 0; i < MaxThreadIndex(); i++) {
             treelet_loading_threads.emplace_back([&] {
-                while (!all_downloaded) {
+                while (true) {
                     unique_lock<mutex> l{to_load_mutex};
                     to_load_cv.wait(l, [&] {
                         return !treelets_to_load.empty() or all_downloaded;
