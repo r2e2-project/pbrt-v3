@@ -191,6 +191,7 @@ struct Options {
     Float cropWindow[2][2];
     std::string proxyDir {};
     bool noStats = false;
+    std::string treeletsUrlPrefix {};
 };
 
 extern Options PbrtOptions;

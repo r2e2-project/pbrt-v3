@@ -76,6 +76,7 @@ Cloud:
   --nomaterial         Don't dump the texture information
   --proxydir           Where to find proxies 
   --nostats            Don't print pbrt stats at the end
+  --treeletsurl        Address to download treelets from
 
 )");
     exit(msg ? 1 : 0);
@@ -170,6 +171,14 @@ int main(int argc, char *argv[]) {
             options.proxyDir = std::string(argv[++i]);
         } else if (!strncmp(argv[i], "--proxydir=", 11)) {
             options.proxyDir = std::string(argv[i] + 11);
+        } else if (!strcmp(argv[i], "--treeletsurl") ||
+                   !strcmp(argv[i], "-treeletsurl")) {
+            if (i + 1 == argc) {
+                usage("missing value after --treeletsurl argument");
+            }
+            options.treeletsUrlPrefix = std::string(argv[++i]);
+        } else if (!strncmp(argv[i], "--treeletsurl=", 11)) {
+            options.treeletsUrlPrefix = std::string(argv[i] + 11);
         } else if (!strcmp(argv[i], "--nostats")) {
             options.noStats = true;
         } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-help") ||
