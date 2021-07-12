@@ -279,6 +279,16 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                 root_id, _manager.getScenePath().c_str());
 
             throw runtime_error("");
+        } else if (!roost::exists(treelet_path)) {
+            const string downloadCommand =
+                StringPrintf("wget %s/T%d -O %s/T%d -q",
+                             PbrtOptions.treeletsUrlPrefix.c_str(), root_id,
+                             _manager.getScenePath().c_str(), root_id);
+
+            if (system(downloadCommand.c_str()) != 0) {
+                Error("Download failed: %s", downloadCommand.c_str());
+                throw runtime_error("");
+            }
         }
 
         ifstream fin{treelet_path, ios::binary | ios::ate};
