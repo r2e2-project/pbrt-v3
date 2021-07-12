@@ -285,10 +285,12 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                              PbrtOptions.treeletsUrlPrefix.c_str(), root_id,
                              _manager.getScenePath().c_str(), root_id);
 
+            LOG(INFO) << "Download started: " << root_id;
             if (system(downloadCommand.c_str()) != 0) {
                 Error("Download failed: %s", downloadCommand.c_str());
                 throw runtime_error("");
             }
+            LOG(INFO) << "Treelet download finished: " << root_id;
         }
 
         ifstream fin{treelet_path, ios::binary | ios::ate};
