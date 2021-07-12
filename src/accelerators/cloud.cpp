@@ -268,8 +268,18 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     vector<char> treelet_buffer;
     if (!buffer) {
         const string treelet_path =
-            _manager.getScenePath() + "/" +
-            _manager.getFileName(ObjectType::Treelet, root_id);
+            _manager.getFilePath(ObjectType::Treelet, root_id);
+
+        /* do we have this treelet on disk, or can we download ? */
+        if (!roost::exists(treelet_path) &&
+            PbrtOptions.treeletsUrlPrefix.empty()) {
+            Error(
+                "could not find treelet %d at %s, and no URL is provided to "
+                "download it",
+                root_id, _manager.getScenePath().c_str());
+
+            throw runtime_error("");
+        }
 
         ifstream fin{treelet_path, ios::binary | ios::ate};
         streamsize size = fin.tellg();
