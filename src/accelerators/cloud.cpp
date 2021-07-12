@@ -2,6 +2,7 @@
 
 #include <fstream>
 #include <memory>
+#include <queue>
 #include <stack>
 #include <thread>
 
@@ -71,11 +72,83 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all)
     if (preload_all) {
         /* (1) load all the treelets in parallel */
         const auto treelet_count = _manager.treeletCount();
-
         treelets_.resize(treelet_count + 1);
 
-        ParallelFor([&](int64_t treelet_id) { loadTreeletBase(treelet_id); },
-                    treelet_count);
+        /* (1.A) do we need to download any treelets? */
+        vector<uint32_t> treelets_to_download;
+        queue<uint32_t> treelets_to_load;
+
+        for (size_t i = 0; i < treelet_count; i++) {
+            const auto path = _manager.getFilePath(ObjectType::Treelet, i);
+            if (!roost::exists(path)) {
+                treelets_to_download.push_back(i);
+            } else {
+                treelets_to_load.push(i);
+            }
+        }
+
+        if (!treelets_to_download.empty() &&
+            PbrtOptions.treeletsUrlPrefix.empty()) {
+            throw runtime_error(
+                "Some treelets could not be found, and no download URL is "
+                "specified");
+        }
+
+        mutex to_load_mutex;
+        condition_variable to_load_cv;
+
+        atomic<bool> all_downloaded{false};
+        vector<thread> treelet_loading_threads;
+
+        for (size_t i = 0; i < MaxThreadIndex(); i++) {
+            treelet_loading_threads.emplace_back([&] {
+                while (!all_downloaded) {
+                    unique_lock<mutex> l{to_load_mutex};
+                    to_load_cv.wait(l, [&] {
+                        return !treelets_to_load.empty() or all_downloaded;
+                    });
+
+                    if (treelets_to_load.empty()) {
+                        return;
+                    }
+
+                    const auto tid = treelets_to_load.front();
+                    treelets_to_load.pop();
+                    l.unlock();
+
+                    loadTreeletBase(tid);
+                }
+            });
+        }
+
+        ParallelFor(
+            [&](int64_t i) {
+                const auto treelet_id = treelets_to_download[i];
+
+                const string downloadCommand = StringPrintf(
+                    "wget %s/T%d -O %s/T%d -q",
+                    PbrtOptions.treeletsUrlPrefix.c_str(), treelet_id,
+                    _manager.getScenePath().c_str(), treelet_id);
+
+                LOG(INFO) << "Download started: " << treelet_id;
+                if (system(downloadCommand.c_str()) != 0) {
+                    Error("Download failed: %s", downloadCommand.c_str());
+                    throw runtime_error("");
+                }
+                LOG(INFO) << "Treelet download finished: " << treelet_id;
+
+                unique_lock<mutex> l{to_load_mutex};
+                treelets_to_load.push(treelet_id);
+                to_load_cv.notify_one();
+            },
+            treelets_to_download.size());
+
+        all_downloaded = true;
+        to_load_cv.notify_all();
+
+        for (auto &t : treelet_loading_threads) {
+            t.join();
+        }
 
         /* (2.A) load all the necessary materials */
         set<uint32_t> required_materials;
@@ -269,29 +342,6 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     if (!buffer) {
         const string treelet_path =
             _manager.getFilePath(ObjectType::Treelet, root_id);
-
-        /* do we have this treelet on disk, or can we download ? */
-        if (!roost::exists(treelet_path) &&
-            PbrtOptions.treeletsUrlPrefix.empty()) {
-            Error(
-                "could not find treelet %d at %s, and no URL is provided to "
-                "download it",
-                root_id, _manager.getScenePath().c_str());
-
-            throw runtime_error("");
-        } else if (!roost::exists(treelet_path)) {
-            const string downloadCommand =
-                StringPrintf("wget %s/T%d -O %s/T%d -q",
-                             PbrtOptions.treeletsUrlPrefix.c_str(), root_id,
-                             _manager.getScenePath().c_str(), root_id);
-
-            LOG(INFO) << "Download started: " << root_id;
-            if (system(downloadCommand.c_str()) != 0) {
-                Error("Download failed: %s", downloadCommand.c_str());
-                throw runtime_error("");
-            }
-            LOG(INFO) << "Treelet download finished: " << root_id;
-        }
 
         ifstream fin{treelet_path, ios::binary | ios::ate};
         streamsize size = fin.tellg();
