@@ -436,6 +436,14 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     reader.read(&nodes_buffer, &nodes_buf_len);
     memcpy(&nodes[0], nodes_buffer, nodes_buf_len);
 
+    treelet.unfinished_geometric.reserve(primitive_count);
+    treelet.unfinished_transformed.reserve(primitive_count);
+
+    /* we can have at most 'primitive_count' treelets; although the actual
+    number is lower */
+    treelet.triangle_storage.resize(sizeof(Triangle) * primitive_count);
+    size_t total_triangle_count = 0;
+
     for (auto &node : nodes) {
         const serdes::cloudbvh::TransformedPrimitive *serdes_primitive;
         const serdes::cloudbvh::Triangle *serdes_triangle;
@@ -504,9 +512,12 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
             treelet.required_materials.insert(material_id);
 
-            auto shape = make_shared<Triangle>(
-                &identity_transform_, &identity_transform_, false,
-                tree_meshes.at(mesh_id), tri_number);
+            shared_ptr<Triangle> shape{
+                new (treelet.triangle_storage.data() +
+                     sizeof(Triangle) * total_triangle_count++)
+                    Triangle(&identity_transform_, &identity_transform_, false,
+                             tree_meshes.at(mesh_id), tri_number),
+                [](Triangle *) {} /* no deleter, mem is managed by a vector */};
 
             treelet.unfinished_geometric.emplace_back(
                 tree_primitives.size(), material_id, area_light_id,
@@ -514,9 +525,10 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
             tree_primitives.push_back(nullptr);
         }
-
         nNodes++;
     }
+
+    treelet.triangle_storage.resize(sizeof(Triangle) * total_triangle_count);
 }
 
 void CloudBVH::Trace(RayState &rayState) const {
