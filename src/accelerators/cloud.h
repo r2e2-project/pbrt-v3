@@ -112,15 +112,18 @@ class CloudBVH : public Aggregate {
     };
 
     struct Treelet {
-        std::vector<TreeletNode> nodes{};
-        std::vector<std::unique_ptr<Primitive>> primitives{};
-        std::list<std::unique_ptr<Transform>> transforms{};
-        std::map<uint64_t, std::shared_ptr<Primitive>> instances{};
-
         std::shared_ptr<char> mesh_storage{};
+        std::vector<char> triangle_storage{};
+        std::vector<char> geometric_storage{};
+        std::vector<char> transformed_storage{};
+        std::vector<std::unique_ptr<Primitive>> stage1_primitives{};
+
         std::map<uint32_t, std::shared_ptr<TriangleMesh>> meshes{};
 
-        std::vector<char> triangle_storage{};
+        std::vector<TreeletNode> nodes{};
+        std::vector<Primitive*> primitives{};
+        std::list<std::unique_ptr<Transform>> transforms{};
+        std::map<uint64_t, std::shared_ptr<Primitive>> instances{};
 
         std::set<uint32_t> required_materials{};
         std::set<uint64_t> required_instances{};

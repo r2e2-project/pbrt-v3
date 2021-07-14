@@ -294,15 +294,25 @@ void CloudBVH::LoadTreelet(const uint32_t root_id, const char *buffer,
 void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
     auto &treelet = *treelets_[root_id];
 
+    treelet.transformed_storage.resize(sizeof(TransformedPrimitive) *
+                                       treelet.unfinished_transformed.size());
+
+    size_t i = 0;
     /* fill in unfinished primitives */
     for (auto &u : treelet.unfinished_transformed) {
         treelet.primitives[u.primitive_index] =
-            make_unique<TransformedPrimitive>(bvh_instances_[u.instance_ref],
-                                              move(u.primitive_to_world));
+            new (treelet.transformed_storage.data() +
+                 i++ * sizeof(TransformedPrimitive))
+                TransformedPrimitive(bvh_instances_[u.instance_ref],
+                                     move(u.primitive_to_world));
     }
 
     MediumInterface medium_interface{};
 
+    treelet.geometric_storage.resize(sizeof(GeometricPrimitive) *
+                                     treelet.unfinished_geometric.size());
+
+    i = 0;
     for (auto &u : treelet.unfinished_geometric) {
         /* do we need to make an area light for this guy? */
         shared_ptr<AreaLight> area_light;
@@ -314,9 +324,10 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
                                                 light_data.first, u.shape);
         }
 
-        treelet.primitives[u.primitive_index] = make_unique<GeometricPrimitive>(
-            move(u.shape), materials_[u.material_id], area_light,
-            medium_interface);
+        treelet.primitives[u.primitive_index] = new (
+            treelet.geometric_storage.data() + i++ * sizeof(GeometricPrimitive))
+            GeometricPrimitive(move(u.shape), materials_[u.material_id],
+                               area_light, medium_interface);
     }
 
     treelet.required_instances.clear();
@@ -486,8 +497,11 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                         make_shared<IncludedInstance>(&treelet, instance_node);
                 }
 
-                tree_primitives.push_back(make_unique<TransformedPrimitive>(
-                    tree_instances[instance_ref], primitive_to_world));
+                treelet.stage1_primitives.push_back(
+                    make_unique<TransformedPrimitive>(
+                        tree_instances[instance_ref], primitive_to_world));
+                tree_primitives.push_back(
+                    treelet.stage1_primitives.back().get());
             } else {
                 treelet.required_instances.insert(instance_ref);
 
@@ -585,8 +599,7 @@ void CloudBVH::Trace(RayState &rayState) const {
                     if (primitives[i]->GetType() ==
                         PrimitiveType::Transformed) {
                         TransformedPrimitive *tp =
-                            dynamic_cast<TransformedPrimitive *>(
-                                primitives[i].get());
+                            dynamic_cast<TransformedPrimitive *>(primitives[i]);
 
                         shared_ptr<ExternalInstance> cbvh =
                             dynamic_pointer_cast<ExternalInstance>(
