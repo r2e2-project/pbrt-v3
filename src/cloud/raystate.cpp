@@ -317,7 +317,7 @@ size_t PackRay(char *bufferStart, const RayState &state) {
         buffer += sizeof(PackedDifferentials);
     }
 
-    if (hdr->hit) {
+    if (hdr->hit && !hdr->isShadowRay) {
         new (buffer) PackedHitInfo(state.hitInfo.material, state.hitInfo.isect);
         buffer += sizeof(PackedHitInfo);
     }
@@ -371,7 +371,7 @@ void UnPackRay(char *buffer, RayState &state) {
         buffer += sizeof(PackedDifferentials);
     }
 
-    if (state.hit) {
+    if (state.hit && !state.isShadowRay) {
         PackedHitInfo *hitInfo = reinterpret_cast<PackedHitInfo *>(buffer);
         buffer += sizeof(PackedHitInfo);
 
