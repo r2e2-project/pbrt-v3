@@ -105,6 +105,11 @@ static_assert(
 
 void SceneManager::init(const string& scenePath) {
     this->scenePath = scenePath;
+
+    // ID = 0 for material and area lights is reserved for 'null'
+    autoIds[to_underlying(ObjectType::AreaLight)]++;
+    autoIds[to_underlying(ObjectType::Material)]++;
+
     sceneFD.reset(CheckSystemCall(
         scenePath, open(scenePath.c_str(), O_DIRECTORY | O_CLOEXEC)));
 }
@@ -189,7 +194,11 @@ protobuf::Manifest SceneManager::makeManifest() const {
     /* add ids for all objects */
     auto add_to_manifest = [this, &manifest](const ObjectType& type) {
         size_t total_ids = autoIds[to_underlying(type)];
-        for (size_t id = 0; id < total_ids; ++id) {
+        for (size_t id =
+                 (type == ObjectType::Material or type == ObjectType::AreaLight)
+                     ? 1
+                     : 0;
+             id < total_ids; ++id) {
             ObjectKey type_id{type, id};
 
             size_t size = 0;
@@ -214,8 +223,6 @@ protobuf::Manifest SceneManager::makeManifest() const {
     add_to_manifest(ObjectType::FloatTexture);
     add_to_manifest(ObjectType::SpectrumTexture);
     add_to_manifest(ObjectType::Texture);
-    add_to_manifest(ObjectType::AreaLight);
-    add_to_manifest(ObjectType::AreaLights);
 
     return manifest;
 }
@@ -325,7 +332,7 @@ vector<uint32_t> SceneManager::getAllMaterialIds() const {
     set<uint32_t> res;
 
     for (auto& kv : tmMaterialIds) {
-        if (kv.second == numeric_limits<uint32_t>::max()) continue;
+        if (!kv.second) continue;
         res.insert(kv.second);
     }
 

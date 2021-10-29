@@ -121,7 +121,7 @@ class SceneManager {
     }
 
     uint32_t getMaterialTreeletId(const uint32_t mtlId) {
-        if (mtlId == std::numeric_limits<uint32_t>::max()) return 0;
+        if (not mtlId) return 0;
         return materialToTreelet.at(mtlId);
     }
 
@@ -130,8 +130,7 @@ class SceneManager {
     }
 
     uint32_t getMeshAreaLightId(const TriangleMesh* tm) {
-        return tmAreaLightIds.count(tm) ? tmAreaLightIds.at(tm)
-                                        : std::numeric_limits<uint32_t>::max();
+        return tmAreaLightIds.count(tm) ? tmAreaLightIds.at(tm) : 0;
     }
 
     std::vector<double> getTreeletProbs() const;

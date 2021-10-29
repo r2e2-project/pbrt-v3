@@ -1472,7 +1472,7 @@ void pbrtShape(const std::string &name, const ParamSet &params) {
             if (mtl) {
                 mtlId = _manager.getId(mtl.get());
             } else {
-                mtlId = std::numeric_limits<uint32_t>::max();
+                mtlId = 0;
             }
 
             _manager.recordMeshMaterialId(
@@ -1506,7 +1506,7 @@ void pbrtShape(const std::string &name, const ParamSet &params) {
             const TriangleMesh *mesh =
                 std::dynamic_pointer_cast<Triangle>(shapes[0])->mesh.get();
 
-            const auto lightId = _manager.getNextId(ObjectType::Lights);
+            auto lightId = _manager.getNextId(ObjectType::AreaLight);
             renderOptions->protoAreaLights.emplace_back(area_light::to_protobuf(
                 lightId, "diffuse", graphicsState.areaLightParams,
                 curTransform[0], mesh));

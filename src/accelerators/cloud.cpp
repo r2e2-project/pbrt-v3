@@ -77,7 +77,7 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
         }
 
         for (const auto mkey : required_materials) {
-            if (mkey.id == numeric_limits<uint32_t>::max()) {
+            if (not mkey.id) {
                 materials_[mkey.id] = nullptr;
                 continue;
             }
@@ -118,7 +118,7 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
 CloudBVH::~CloudBVH() {}
 
 shared_ptr<Material> CloudBVH::GetMaterial(const uint32_t material_id) const {
-    if (material_id == numeric_limits<uint32_t>::max()) return nullptr;
+    if (not material_id) return nullptr;
 
     auto &treelet = *treelets_[bvh_root_];
     auto &mat = treelet.included_material.at(material_id);
@@ -201,7 +201,7 @@ void CloudBVH::LoadTreelet(const uint32_t root_id, const char *buffer,
 
     /* load the materials */
     for (const auto mkey : treelet.required_materials) {
-        if (mkey.id == numeric_limits<uint32_t>::max()) {
+        if (not mkey.id) {
             materials_[mkey.id] = make_shared<PlaceholderMaterial>(mkey);
             continue;
         }
@@ -246,7 +246,7 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
         /* do we need to make an area light for this guy? */
         shared_ptr<AreaLight> area_light;
 
-        if (u.area_light_id != numeric_limits<uint32_t>::max()) {
+        if (u.area_light_id) {
             auto &light_data = area_light_params_.at(u.area_light_id);
             area_light = CreateDiffuseAreaLight(light_data.second,
                                                 medium_interface.outside,
@@ -423,7 +423,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
             CHECK_EQ(p.second, true);
             mesh_material_ids[tm_id] = material_key;
 
-            if (area_light_id != numeric_limits<uint32_t>::max()) {
+            if (area_light_id) {
                 mesh_area_light_id[tm_id] = area_light_id;
             }
         }
@@ -512,7 +512,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
             const auto material_key = mesh_material_ids[mesh_id];
             const auto area_light_id = mesh_area_light_id.count(mesh_id)
                                            ? mesh_area_light_id.at(mesh_id)
-                                           : numeric_limits<uint32_t>::max();
+                                           : 0;
 
             treelet.required_materials.insert(material_key);
 

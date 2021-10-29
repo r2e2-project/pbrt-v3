@@ -2021,7 +2021,7 @@ map<uint32_t, uint32_t> cutPtexTexture(const string &srcPath,
 size_t getTotalTextureSize(const uint32_t materialId) {
     static map<uint32_t, size_t> textureSizes = {};
 
-    if (materialId == numeric_limits<uint32_t>::max()) {
+    if (not materialId) {
         return 0;
     }
 
@@ -2101,7 +2101,7 @@ TextureList getTextureList(const protobuf::Material &mtl) {
 }
 
 TextureList getTextureList(const uint32_t mtlId) {
-    if (mtlId == numeric_limits<uint32_t>::max()) {
+    if (not mtlId) {
         return {};
     }
 
