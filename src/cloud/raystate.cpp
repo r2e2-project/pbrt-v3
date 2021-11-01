@@ -312,6 +312,20 @@ struct __attribute__((packed, aligned(1))) PackedHitInfo {
     }
 };
 
+struct __attribute__((packed, aligned(1))) PackedLightRayInfo {
+    uint32_t sampledLightId;
+    Packed3f sampledDirection;
+
+    PackedLightRayInfo(const RayState::LightRayInfo &lri)
+        : sampledLightId(lri.sampledLightId),
+          sampledDirection(lri.sampledDirection) {}
+
+    void ToLightRayInfo(RayState::LightRayInfo &lri) {
+        lri.sampledLightId = sampledLightId;
+        lri.sampledDirection = sampledDirection.ToVector3f();
+    }
+};
+
 size_t PackRay(char *bufferStart, const RayState &state) {
     char *buffer = bufferStart;
     PackedRayFixedHdr *hdr = new (buffer) PackedRayFixedHdr(state);
@@ -322,8 +336,8 @@ size_t PackRay(char *bufferStart, const RayState &state) {
     }
 
     if (hdr->isLightRay) {
-        new (buffer) decltype(state.sampledLightId)(state.sampledLightId);
-        buffer += sizeof(state.sampledLightId);
+        new (buffer) PackedLightRayInfo(state.lightRayInfo);
+        buffer += sizeof(PackedLightRayInfo);
     }
 
     if (hdr->hit && !hdr->isShadowRay) {
@@ -381,9 +395,11 @@ void UnPackRay(char *buffer, RayState &state) {
     }
 
     if (state.isLightRay) {
-        state.sampledLightId =
-            *reinterpret_cast<decltype(state.sampledLightId) *>(buffer);
-        buffer += sizeof(state.sampledLightId);
+        PackedLightRayInfo *lightRayInfo =
+            reinterpret_cast<PackedLightRayInfo *>(buffer);
+        buffer += sizeof(PackedLightRayInfo);
+
+        lightRayInfo->ToLightRayInfo(state.lightRayInfo);
     }
 
     if (state.hit && !state.isShadowRay) {
@@ -412,7 +428,7 @@ const size_t RayState::MaxPackedSize =
     sizeof(PackedRayFixedHdr) + 64 * sizeof(PackedTreeletNode) +
     sizeof(PackedTreeletNode) + sizeof(PackedDifferentials) +
     sizeof(PackedTransform) + sizeof(PackedHitInfo) +
-    sizeof(RayState::sampledLightId) + 4;
+    sizeof(PackedLightRayInfo) + 4;
 
 size_t RayState::Serialize(char *data) {
     static thread_local char packedBuffer[RayState::MaxPackedSize];

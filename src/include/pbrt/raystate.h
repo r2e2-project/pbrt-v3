@@ -37,6 +37,11 @@ class RayState {
         SurfaceInteraction isect{};
     };
 
+    struct LightRayInfo {
+        uint32_t sampledLightId{};
+        Vector3f sampledDirection{};
+    };
+
     struct Sample {
         uint64_t id;
         Point2f pFilm;
@@ -64,7 +69,7 @@ class RayState {
 
     /* multiple importance sampling */
     bool isLightRay{false};
-    uint32_t sampledLightId{};
+    LightRayInfo lightRayInfo{};
 
     bool hit{false};
     HitInfo hitInfo{};
@@ -78,6 +83,7 @@ class RayState {
     static const size_t MaxPackedSize;
 
     bool IsShadowRay() const { return isShadowRay; }
+    bool IsLightRay() const { return isLightRay; }
     bool HasHit() const { return hit; }
 
     int64_t SampleNum(const uint32_t spp) const;
