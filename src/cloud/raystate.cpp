@@ -299,13 +299,15 @@ struct __attribute__((packed, aligned(1))) PackedSurfaceInteraction {
 
 struct __attribute__((packed, aligned(1))) PackedHitInfo {
     MaterialKey material;
+    uint32_t arealight{};
     PackedSurfaceInteraction isect;
 
-    PackedHitInfo(const MaterialKey &material, const SurfaceInteraction &isect)
-        : material(material), isect(isect) {}
+    PackedHitInfo(const RayState::HitInfo &hi)
+        : material(hi.material), arealight(hi.arealight), isect(hi.isect) {}
 
     void ToHitInfo(RayState::HitInfo &hitInfo) {
         hitInfo.material = material;
+        hitInfo.arealight = arealight;
         isect.ToSurfaceInteraction(&hitInfo.isect);
     }
 };
@@ -325,7 +327,7 @@ size_t PackRay(char *bufferStart, const RayState &state) {
     }
 
     if (hdr->hit && !hdr->isShadowRay) {
-        new (buffer) PackedHitInfo(state.hitInfo.material, state.hitInfo.isect);
+        new (buffer) PackedHitInfo(state.hitInfo);
         buffer += sizeof(PackedHitInfo);
     }
 

@@ -33,6 +33,7 @@ class RayState {
 
     struct HitInfo {
         MaterialKey material{};
+        uint32_t arealight{};
         SurfaceInteraction isect{};
     };
 
