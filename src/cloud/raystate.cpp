@@ -187,6 +187,7 @@ struct __attribute__((packed, aligned(1))) PackedSampleID {
 struct __attribute__((packed, aligned(1))) PackedRayFixedHdr {
     uint8_t trackRay : 1;
     uint8_t isShadowRay : 1;
+    uint8_t isLightRay : 1;
     uint8_t hit : 1;
     uint8_t remainingBounces : 5;
 
@@ -203,6 +204,7 @@ struct __attribute__((packed, aligned(1))) PackedRayFixedHdr {
     PackedRayFixedHdr(const RayState &r)
         : trackRay(r.trackRay),
           isShadowRay(r.isShadowRay),
+          isLightRay(r.isLightRay),
           hit(r.hit),
           remainingBounces(r.remainingBounces),
           hop(r.hop),
@@ -317,6 +319,11 @@ size_t PackRay(char *bufferStart, const RayState &state) {
         buffer += sizeof(PackedDifferentials);
     }
 
+    if (hdr->isLightRay) {
+        new (buffer) decltype(state.sampledLightId)(state.sampledLightId);
+        buffer += sizeof(state.sampledLightId);
+    }
+
     if (hdr->hit && !hdr->isShadowRay) {
         new (buffer) PackedHitInfo(state.hitInfo.material, state.hitInfo.isect);
         buffer += sizeof(PackedHitInfo);
@@ -371,6 +378,12 @@ void UnPackRay(char *buffer, RayState &state) {
         buffer += sizeof(PackedDifferentials);
     }
 
+    if (state.isLightRay) {
+        state.sampledLightId =
+            *reinterpret_cast<decltype(state.sampledLightId) *>(buffer);
+        buffer += sizeof(state.sampledLightId);
+    }
+
     if (state.hit && !state.isShadowRay) {
         PackedHitInfo *hitInfo = reinterpret_cast<PackedHitInfo *>(buffer);
         buffer += sizeof(PackedHitInfo);
@@ -396,7 +409,8 @@ void UnPackRay(char *buffer, RayState &state) {
 const size_t RayState::MaxPackedSize =
     sizeof(PackedRayFixedHdr) + 64 * sizeof(PackedTreeletNode) +
     sizeof(PackedTreeletNode) + sizeof(PackedDifferentials) +
-    sizeof(PackedTransform) + sizeof(PackedHitInfo) + 4;
+    sizeof(PackedTransform) + sizeof(PackedHitInfo) +
+    sizeof(RayState::sampledLightId) + 4;
 
 size_t RayState::Serialize(char *data) {
     static thread_local char packedBuffer[RayState::MaxPackedSize];

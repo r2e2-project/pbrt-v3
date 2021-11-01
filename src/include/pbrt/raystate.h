@@ -61,6 +61,10 @@ class RayState {
     uint8_t remainingBounces{3};
     bool isShadowRay{false};
 
+    /* multiple importance sampling */
+    bool isLightRay{false};
+    uint32_t sampledLightId{};
+
     bool hit{false};
     HitInfo hitInfo{};
 
