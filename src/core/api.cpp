@@ -1511,6 +1511,10 @@ void pbrtShape(const std::string &name, const ParamSet &params) {
                 lightId, "diffuse", graphicsState.areaLightParams,
                 curTransform[0], mesh));
 
+            for (size_t i = 1; i < shapes.size(); i++) {
+                _manager.getNextId(ObjectType::AreaLight);
+            }
+
             _manager.recordMeshAreaLightId(mesh, lightId);
         }
 

@@ -251,6 +251,7 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
             area_light = CreateDiffuseAreaLight(light_data.second,
                                                 medium_interface.outside,
                                                 light_data.first, u.shape);
+            area_light->SetID(u.area_light_id + u.triangle_idx);
         }
 
         treelet.primitives[u.primitive_index] = make_unique<GeometricPrimitive>(
@@ -522,7 +523,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
             treelet.unfinished_geometric.emplace_back(
                 tree_primitives.size(), material_key, area_light_id,
-                move(shape));
+                move(shape), i);
 
             tree_primitives.push_back(nullptr);
         }
@@ -628,13 +629,20 @@ void CloudBVH::Trace(RayState &rayState) const {
                                         "material");
                                 }
 
-                                auto mat_key =
+                                const auto mat_key =
                                     dynamic_cast<const PlaceholderMaterial *>(
                                         isect.primitive->GetMaterial())
                                         ->GetMaterialKey();
 
+                                const auto arealight =
+                                    isect.primitive->GetAreaLight()
+                                        ? isect.primitive->GetAreaLight()
+                                              ->GetID()
+                                        : 0;
+
                                 rayState.ray.tMax = ray.tMax;
-                                rayState.SetHit(current, isect, mat_key);
+                                rayState.SetHit(current, isect, mat_key,
+                                                arealight);
                             }
                         }
                     } else if (primitives[i]->Intersect(ray, &isect)) {
@@ -645,13 +653,18 @@ void CloudBVH::Trace(RayState &rayState) const {
                                 "material");
                         }
 
-                        auto mat_key =
+                        const auto mat_key =
                             dynamic_cast<const PlaceholderMaterial *>(
                                 isect.primitive->GetMaterial())
                                 ->GetMaterialKey();
 
+                        const auto arealight =
+                            isect.primitive->GetAreaLight()
+                                ? isect.primitive->GetAreaLight()->GetID()
+                                : 0;
+
                         rayState.ray.tMax = ray.tMax;
-                        rayState.SetHit(current, isect, mat_key);
+                        rayState.SetHit(current, isect, mat_key, arealight);
                     }
 
                     current.primitive++;

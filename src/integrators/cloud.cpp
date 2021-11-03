@@ -36,7 +36,7 @@ RayStatePtr CloudIntegrator::Trace(RayStatePtr &&rayState,
     return move(rayState);
 }
 
-pair<RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
+tuple<RayStatePtr, RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
     RayStatePtr &&rayStatePtr, const CloudBVH &treelet, const Scene &scene,
     const Vector2i &sampleExtent, shared_ptr<GlobalSampler> &sampler,
     int maxPathDepth, MemoryArena &arena) {
@@ -47,6 +47,7 @@ pair<RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
 
     RayStatePtr bouncePtr = nullptr;
     RayStatePtr shadowRayPtr = nullptr;
+    RayStatePtr lightRayPtr = nullptr;
 
     auto &rayState = *rayStatePtr;
 
@@ -72,7 +73,7 @@ pair<RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
         newRay.remainingBounces -= 1;
         newRay.StartTrace();
 
-        return {move(bouncePtr), nullptr};
+        return {move(bouncePtr), nullptr, nullptr};
     }
 
     /* setting the sampler */
@@ -95,7 +96,7 @@ pair<RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
 
         Point2f uLight = sampler->Get2D();
         Point2f uScattering = sampler->Get2D();  // For consistency with PBRT
-        (void)uScattering;                       // Only used for delta lights
+        Float scatteringPdf = 0;
         Vector3f wi;
         Float lightPdf;
         VisibilityTester visibility;
@@ -106,6 +107,7 @@ pair<RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
         if (lightPdf > 0 && !Li.IsBlack()) {
             Spectrum f;
             f = it.bsdf->f(it.wo, wi, bsdfFlags) * AbsDot(wi, it.shading.n);
+            scatteringPdf = it.bsdf->Pdf(it.wo, wi, bsdfFlags);
 
             if (!f.IsBlack()) {
                 /* now we have to shoot the ray to the light source */
@@ -118,12 +120,58 @@ pair<RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
                 shadowRay.sample = rayState.sample;
                 shadowRay.ray = visibility.P0().SpawnRayTo(visibility.P1());
                 shadowRay.beta = rayState.beta;
-                shadowRay.Ld = (f * Li / lightPdf) / lightSelectPdf;
+
+                if (IsDeltaLight(light->flags)) {
+                    shadowRay.Ld = (f * Li / lightPdf) / lightSelectPdf;
+                } else {
+                    const Float weight =
+                        PowerHeuristic(1, lightPdf, 1, scatteringPdf);
+                    shadowRay.Ld =
+                        (f * Li * weight / lightPdf) / lightSelectPdf;
+                }
+
                 shadowRay.remainingBounces = rayState.remainingBounces;
                 shadowRay.isShadowRay = true;
                 shadowRay.StartTrace();
 
                 ++nShadowTests;
+            }
+        }
+
+        if (!IsDeltaLight(light->flags)) {
+            BxDFType sampledType;
+            Spectrum f =
+                it.bsdf->Sample_f(it.wo, &wi, uScattering, &scatteringPdf,
+                                  bsdfFlags, &sampledType);
+            f *= AbsDot(wi, it.shading.n);
+            const bool sampledSpecular = (sampledType & BSDF_SPECULAR) != 0;
+
+            if (!f.IsBlack() && scatteringPdf) {
+                if (!sampledSpecular) {
+                    lightPdf = light->Pdf_Li(it, wi);
+
+                    if (lightPdf > 0) {
+                        const Float weight =
+                            PowerHeuristic(1, scatteringPdf, 1, lightPdf);
+
+                        lightRayPtr = RayState::Create();
+                        auto &lightRay = *lightRayPtr;
+
+                        lightRay.trackRay = rayState.trackRay;
+                        lightRay.hop = 0;
+                        lightRay.pathHop = rayState.pathHop;
+                        lightRay.sample = rayState.sample;
+                        lightRay.ray = it.SpawnRay(wi);
+                        lightRay.beta = rayState.beta;
+                        lightRay.Ld =
+                            f * weight / scatteringPdf / lightSelectPdf;
+                        lightRay.remainingBounces = rayState.remainingBounces;
+                        lightRay.isLightRay = true;
+                        lightRay.lightRayInfo.sampledDirection = wi;
+                        lightRay.lightRayInfo.sampledLightId = lightNum + 1;
+                        lightRay.StartTrace();
+                    }
+                }
             }
         }
     }
@@ -176,7 +224,7 @@ pair<RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
         ReportValue(nRemainingBounces, rayState.remainingBounces);
     }
 
-    return {move(bouncePtr), move(shadowRayPtr)};
+    return {move(bouncePtr), move(shadowRayPtr), move(lightRayPtr)};
 }
 
 void CloudIntegrator::Preprocess(const Scene &scene, Sampler &sampler) {
@@ -259,13 +307,9 @@ void CloudIntegrator::Render(const Scene &scene) {
             auto newRays = Shade(move(statePtr), *bvh, scene, sampleExtent,
                                  sampler, maxDepth, arena);
 
-            if (newRays.first != nullptr) {
-                rayQueue.push_back(move(newRays.first));
-            }
-
-            if (newRays.second != nullptr) {
-                rayQueue.push_back(move(newRays.second));
-            }
+            if (get<0>(newRays)) rayQueue.push_back(move(get<0>(newRays)));
+            if (get<1>(newRays)) rayQueue.push_back(move(get<1>(newRays)));
+            if (get<2>(newRays)) rayQueue.push_back(move(get<2>(newRays)));
         } else {
             throw runtime_error("unexpected ray state");
         }

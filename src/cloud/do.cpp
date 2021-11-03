@@ -32,7 +32,7 @@ int main(int argc, char const *argv[]) {
         }
 
         FLAGS_log_prefix = false;
-        google::InitGoogleLogging( argv[0] );
+        google::InitGoogleLogging(argv[0]);
 
         /* CloudBVH requires this */
         PbrtOptions.nThreads = 1;
@@ -107,6 +107,32 @@ int main(int argc, char const *argv[]) {
                     } else {
                         rayList.push(move(newRayPtr));
                     }
+                } else if (newRay.IsLightRay()) {
+                    if (emptyVisit) {
+                        Spectrum Li{0.f};
+
+                        const auto sLight = newRay.lightRayInfo.sampledLightId;
+
+                        if (newRay.HasHit()) {
+                            const auto aLight = newRay.hitInfo.arealight;
+                            if (aLight == sLight) {
+                                Li = dynamic_pointer_cast<AreaLight>(
+                                         fakeScene->lights[aLight - 1])
+                                         ->L(newRay.hitInfo.isect,
+                                             -newRay.lightRayInfo
+                                                  .sampledDirection);
+                            }
+                        } else {
+                            Li = fakeScene->lights[sLight - 1]->Le(newRay.ray);
+                        }
+
+                        if (!Li.IsBlack()) {
+                            newRay.Ld *= Li;
+                            samples.emplace_back(*newRayPtr);
+                        }
+                    } else {
+                        rayList.push(move(newRayPtr));
+                    }
                 } else if (!emptyVisit || hit) {
                     rayList.push(move(newRayPtr));
                 } else if (emptyVisit) {
@@ -119,8 +145,8 @@ int main(int argc, char const *argv[]) {
                     samples.emplace_back(*newRayPtr);
                 }
             } else if (theRay.HasHit()) {
-                RayStatePtr bounceRay, shadowRay;
-                tie(bounceRay, shadowRay) = graphics::ShadeRay(
+                RayStatePtr bounceRay, shadowRay, lightRay;
+                tie(bounceRay, shadowRay, lightRay) = graphics::ShadeRay(
                     move(theRayPtr), *treelets[rayTreeletId], *fakeScene,
                     sampleExtent, sampler, maxDepth, arena);
 
@@ -131,10 +157,30 @@ int main(int argc, char const *argv[]) {
                 if (shadowRay != nullptr) {
                     rayList.push(move(shadowRay));
                 }
+
+                if (lightRay != nullptr) {
+                    rayList.push(move(lightRay));
+                }
             }
         }
 
-        graphics::AccumulateImage(camera, samples);
+        map<pair<float, float>, pbrt::Sample> newSamples;
+
+        for (auto &s : samples) {
+            const auto key = make_pair(s.pFilm.x, s.pFilm.y);
+            if (newSamples.count(key)) {
+                newSamples[make_pair(s.pFilm.x, s.pFilm.y)].L += s.L;
+            } else {
+                newSamples.emplace(make_pair(s.pFilm.x, s.pFilm.y), move(s));
+            }
+        }
+
+        vector<Sample> n;
+        for (auto &s : newSamples) {
+            n.push_back(move(s.second));
+        }
+
+        graphics::AccumulateImage(camera, n);
         camera->film->WriteImage();
     } catch (const exception &e) {
         print_exception(argv[0], e);

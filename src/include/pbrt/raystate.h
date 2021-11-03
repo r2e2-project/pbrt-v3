@@ -95,7 +95,7 @@ class RayState {
     void toVisitPop() { toVisitHead--; }
 
     void SetHit(const TreeletNode &node, const pbrt::SurfaceInteraction &isect,
-                const MaterialKey &material);
+                const MaterialKey &material, const uint32_t arealight);
 
     void StartTrace();
     uint32_t CurrentTreelet() const;

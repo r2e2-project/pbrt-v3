@@ -90,6 +90,9 @@ class Light {
 
     virtual LightType GetType() const = 0;
 
+    void SetID(const uint32_t id) { this->id = id; }
+    uint32_t GetID() const { return id; }
+
     // Light Public Data
     const int flags;
     const int nSamples;
@@ -98,6 +101,7 @@ class Light {
   protected:
     // Light Protected Data
     const Transform LightToWorld, WorldToLight;
+    uint32_t id{0};
 };
 
 class VisibilityTester {

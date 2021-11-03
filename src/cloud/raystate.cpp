@@ -59,9 +59,10 @@ uint32_t RayState::CurrentTreelet() const {
 
 void RayState::SetHit(const TreeletNode &node,
                       const pbrt::SurfaceInteraction &isect,
-                      const MaterialKey &material) {
+                      const MaterialKey &material, const uint32_t arealight) {
     hit = true;
     hitInfo.material = material;
+    hitInfo.arealight = arealight;
     hitInfo.isect = isect;
 
     if (node.transformed) {
@@ -395,11 +396,10 @@ void UnPackRay(char *buffer, RayState &state) {
     }
 
     if (state.isLightRay) {
-        PackedLightRayInfo *lightRayInfo =
-            reinterpret_cast<PackedLightRayInfo *>(buffer);
+        PackedLightRayInfo *p = reinterpret_cast<PackedLightRayInfo *>(buffer);
         buffer += sizeof(PackedLightRayInfo);
 
-        lightRayInfo->ToLightRayInfo(state.lightRayInfo);
+        p->ToLightRayInfo(state.lightRayInfo);
     }
 
     if (state.hit && !state.isShadowRay) {
@@ -476,6 +476,10 @@ size_t RayState::MaxSize() const {
 
     if (hit) {
         size += sizeof(HitInfo);
+    }
+
+    if (isLightRay) {
+        size += sizeof(PackedLightRayInfo);
     }
 
     if (!toVisitEmpty() && toVisitTop().transformed) {

@@ -127,15 +127,18 @@ class CloudBVH : public Aggregate {
         MaterialKey material_key;
         uint32_t area_light_id;
         std::shared_ptr<Shape> shape;
+        size_t triangle_idx;
 
         UnfinishedGeometricPrimitive(const size_t primitive_index,
                                      const MaterialKey &material_key,
                                      const uint32_t area_light_id,
-                                     std::shared_ptr<Shape> &&shape)
+                                     std::shared_ptr<Shape> &&shape,
+                                     const size_t triangle_idx)
             : primitive_index(primitive_index),
               material_key(material_key),
               area_light_id(area_light_id),
-              shape(std::move(shape)) {}
+              shape(std::move(shape)),
+              triangle_idx(triangle_idx) {}
     };
 
     struct Treelet {

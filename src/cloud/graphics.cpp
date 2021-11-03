@@ -119,12 +119,6 @@ Base::Base(const std::string &path, const int samplesPerPixel) {
     sampler = sampler::from_protobuf(proto_sampler, samplesPerPixel);
 
     vector<shared_ptr<Light>> lights;
-    reader = manager.GetReader(ObjectType::Lights);
-    while (!reader->eof()) {
-        protobuf::Light proto_light;
-        reader->read(&proto_light);
-        lights.push_back(move(light::from_protobuf(proto_light)));
-    }
 
     // loading area lights
     MediumInterface mediumInterface{};
@@ -153,6 +147,17 @@ Base::Base(const std::string &path, const int samplesPerPixel) {
                 CreateDiffuseAreaLight(lightTrans, mediumInterface.outside,
                                        lightParams, areaLightShapes.back()));
         }
+    }
+
+    reader = manager.GetReader(ObjectType::Lights);
+    while (!reader->eof()) {
+        protobuf::Light proto_light;
+        reader->read(&proto_light);
+        lights.push_back(move(light::from_protobuf(proto_light)));
+    }
+
+    for (uint32_t i = 0; i < lights.size(); i++) {
+        lights[i]->SetID(i + 1);
     }
 
     reader = manager.GetReader(ObjectType::Scene);
@@ -195,12 +200,10 @@ RayStatePtr TraceRay(RayStatePtr &&rayState, const CloudBVH &treelet) {
     return CloudIntegrator::Trace(move(rayState), treelet);
 }
 
-pair<RayStatePtr, RayStatePtr> ShadeRay(RayStatePtr &&rayState,
-                                        const CloudBVH &treelet,
-                                        const Scene &scene,
-                                        const Vector2i &sampleExtent,
-                                        shared_ptr<GlobalSampler> &sampler,
-                                        int maxPathDepth, MemoryArena &arena) {
+tuple<RayStatePtr, RayStatePtr, RayStatePtr> ShadeRay(
+    RayStatePtr &&rayState, const CloudBVH &treelet, const Scene &scene,
+    const Vector2i &sampleExtent, shared_ptr<GlobalSampler> &sampler,
+    int maxPathDepth, MemoryArena &arena) {
     return CloudIntegrator::Shade(move(rayState), treelet, scene, sampleExtent,
                                   sampler, maxPathDepth, arena);
 }

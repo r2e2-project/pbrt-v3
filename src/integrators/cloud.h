@@ -2,6 +2,7 @@
 #define PBRT_INTEGRATOR_CLOUD_H
 
 #include <memory>
+#include <tuple>
 
 #include "core/camera.h"
 #include "core/integrator.h"
@@ -34,7 +35,7 @@ class CloudIntegrator : public Integrator {
 
     static RayStatePtr Trace(RayStatePtr &&rayState, const CloudBVH &treelet);
 
-    static std::pair<RayStatePtr, RayStatePtr> Shade(
+    static std::tuple<RayStatePtr, RayStatePtr, RayStatePtr> Shade(
         RayStatePtr &&rayState, const CloudBVH &treelet, const Scene &scene,
         const Vector2i &sampleExtent, std::shared_ptr<GlobalSampler> &sampler,
         int maxPathDepth, MemoryArena &arena);

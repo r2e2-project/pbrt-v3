@@ -6,6 +6,7 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <tuple>
 #include <vector>
 
 #include "common.h"
@@ -94,7 +95,7 @@ namespace graphics {
 
 RayStatePtr TraceRay(RayStatePtr &&rayState, const CloudBVH &treelet);
 
-std::pair<RayStatePtr, RayStatePtr> ShadeRay(
+std::tuple<RayStatePtr, RayStatePtr, RayStatePtr> ShadeRay(
     RayStatePtr &&rayState, const CloudBVH &treelet, const Scene &scene,
     const Vector2<int> &sampleExtent, std::shared_ptr<GlobalSampler> &sampler,
     int maxPathDepth, MemoryArena &arena);
