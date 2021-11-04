@@ -119,18 +119,7 @@ CloudBVH::~CloudBVH() {}
 
 shared_ptr<Material> CloudBVH::GetMaterial(const uint32_t material_id) const {
     if (not material_id) return nullptr;
-
-    auto &treelet = *treelets_[bvh_root_];
-    auto &mat = treelet.included_material.at(material_id);
-
-    if (mat == nullptr) {
-        auto reader = _manager.GetReader(ObjectType::Material, material_id);
-        protobuf::Material material;
-        reader->read(&material);
-        mat = material::from_protobuf(material, ftex_, stex_);
-    }
-
-    return mat;
+    return treelets_[bvh_root_]->included_material.at(material_id);
 }
 
 Bounds3f CloudBVH::WorldBound() const {
@@ -329,8 +318,9 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         size_t len;
         reader.read(&data, &len);
 
-        auto tw = _manager.GetWriter(ObjectType::SpectrumTexture, id);
-        tw->write(data, len);
+        protobuf::SpectrumTexture stex_proto;
+        stex_proto.ParseFromArray(data, len);
+        stex_.emplace(id, spectrum_texture::from_protobuf(stex_proto));
     }
 
     // FLOAT TEXTURES
@@ -345,8 +335,9 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         size_t len;
         reader.read(&data, &len);
 
-        auto tw = _manager.GetWriter(ObjectType::FloatTexture, id);
-        tw->write(data, len);
+        protobuf::FloatTexture ftex_proto;
+        ftex_proto.ParseFromArray(data, len);
+        ftex_.emplace(id, float_texture::from_protobuf(ftex_proto));
     }
 
     // MATERIALS
@@ -361,10 +352,11 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         size_t len;
         reader.read(&data, &len);
 
-        auto tw = _manager.GetWriter(ObjectType::Material, id);
-        tw->write(data, len);
+        protobuf::Material material;
+        material.ParseFromArray(data, len);
 
-        treelet.included_material.emplace(id, nullptr);
+        treelet.included_material.emplace(
+            id, material::from_protobuf(material, ftex_, stex_));
     }
 
     map<uint32_t, MaterialKey> mesh_material_ids;
