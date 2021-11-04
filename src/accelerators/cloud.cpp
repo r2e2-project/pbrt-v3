@@ -274,6 +274,11 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
             _manager.getFileName(ObjectType::Treelet, root_id);
 
         ifstream fin{treelet_path, ios::binary | ios::ate};
+
+        if (!fin.good()) {
+            throw runtime_error("Could not open treelet file: " + treelet_path);
+        }
+
         streamsize size = fin.tellg();
         fin.seekg(0, ios::beg);
 
