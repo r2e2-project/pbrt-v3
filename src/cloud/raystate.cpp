@@ -380,6 +380,7 @@ void UnPackRay(char *buffer, RayState &state) {
     state.Ld = hdr->Ld.ToSpectrum();
     state.remainingBounces = hdr->remainingBounces;
     state.isShadowRay = hdr->isShadowRay;
+    state.isLightRay = hdr->isLightRay;
     state.hit = hdr->hit;
     state.toVisitHead = hdr->toVisitHead;
     buffer += sizeof(PackedRayFixedHdr);
