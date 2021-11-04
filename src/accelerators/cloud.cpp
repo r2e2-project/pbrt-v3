@@ -119,7 +119,7 @@ CloudBVH::~CloudBVH() {}
 
 shared_ptr<Material> CloudBVH::GetMaterial(const uint32_t material_id) const {
     if (not material_id) return nullptr;
-    return treelets_[bvh_root_]->included_material.at(material_id);
+    return treelets_.at(bvh_root_)->included_material.at(material_id);
 }
 
 Bounds3f CloudBVH::WorldBound() const {

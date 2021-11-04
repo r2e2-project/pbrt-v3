@@ -42,7 +42,7 @@ tuple<RayStatePtr, RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
     int maxPathDepth, MemoryArena &arena) {
     nShadeCalls++;
 
-    static unique_ptr<LightDistribution> lightDistribution =
+    static thread_local unique_ptr<LightDistribution> lightDistribution =
         CreateLightSampleDistribution("spatial", scene);
 
     RayStatePtr bouncePtr = nullptr;
@@ -52,7 +52,6 @@ tuple<RayStatePtr, RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
     auto &rayState = *rayStatePtr;
 
     SurfaceInteraction &it = rayState.hitInfo.isect;
-
     auto material = treelet.GetMaterial(rayState.hitInfo.material.id);
 
     // the next two lines are basically:
