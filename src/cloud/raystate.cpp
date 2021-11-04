@@ -475,7 +475,7 @@ size_t RayState::MaxSize() const {
         4 + sizeof(PackedRayFixedHdr) + toVisitHead * sizeof(PackedTreeletNode);
 
     if (hit) {
-        size += sizeof(HitInfo);
+        size += sizeof(PackedHitInfo);
     }
 
     if (isLightRay) {
