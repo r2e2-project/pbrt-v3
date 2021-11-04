@@ -685,7 +685,10 @@ shared_ptr<Material> material::from_protobuf(
         const auto id = tex.second;
 
         // let's load the texture if it's not loaded
-        if (loaded_ftex.count(id)) continue;
+        if (loaded_ftex.count(id)) {
+            ftex.emplace(name, loaded_ftex.at(id));
+            continue;
+        }
 
         protobuf::FloatTexture ftex_proto;
         auto reader = global::manager.GetReader(ObjectType::FloatTexture, id);
@@ -699,7 +702,10 @@ shared_ptr<Material> material::from_protobuf(
         const auto id = tex.second;
 
         // let's load the texture if it's not loaded
-        if (loaded_stex.count(id)) continue;
+        if (loaded_stex.count(id)) {
+            stex.emplace(name, loaded_stex.at(id));
+            continue;
+        }
 
         protobuf::SpectrumTexture stex_proto;
         auto reader =
