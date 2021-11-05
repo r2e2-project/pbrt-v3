@@ -17,7 +17,10 @@ bool LiteRecordReader::read(const char** out_buffer, size_t* out_len) {
         *out_len = *record_len;
     }
 
-    *out_buffer = buffer_ + 4;
+    if (out_buffer != nullptr) {
+        *out_buffer = buffer_ + 4;
+    }
+
     buffer_ += (*record_len) + 4;
 
     return buffer_ <= end_;
