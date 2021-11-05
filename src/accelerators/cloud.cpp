@@ -33,9 +33,8 @@ struct membuf : streambuf {
     membuf(char *begin, char *end) { this->setg(begin, begin, end); }
 };
 
-CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
-                   const bool load_materials)
-    : bvh_root_(bvh_root), load_materials_(load_materials) {
+CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all)
+    : bvh_root_(bvh_root) {
     ProfilePhase _(Prof::AccelConstruction);
 
     if (MaxThreadIndex() > 1 && !preload_all) {
@@ -53,10 +52,6 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
             proto.id(),
             make_pair(from_protobuf(proto.light().paramset()),
                       from_protobuf(proto.light().light_to_world())));
-    }
-
-    if (preload_all && !load_materials_) {
-        Error("CloudBVH: load_materials is always active when preloading");
     }
 
     if (preload_all) {
