@@ -859,8 +859,7 @@ void CloudBVH::clear() const {
 }
 
 shared_ptr<CloudBVH> CreateCloudBVH(const ParamSet &ps) {
-    const bool preload = ps.FindOneBool("preload", false);
-    return make_shared<CloudBVH>(0, preload, true);
+    return make_shared<CloudBVH>(0, true);
 }
 
 Bounds3f CloudBVH::IncludedInstance::WorldBound() const {
