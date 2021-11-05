@@ -142,11 +142,11 @@ class CloudBVH : public Aggregate {
     };
 
     struct Treelet {
-        mutable std::map<uint32_t, std::shared_ptr<Material>> included_material;
+        std::map<uint32_t, std::shared_ptr<Material>> included_material;
 
         std::vector<TreeletNode> nodes{};
         std::vector<std::unique_ptr<Primitive>> primitives{};
-        std::list<std::unique_ptr<Transform>> transforms{};
+        std::vector<std::unique_ptr<Transform>> transforms{};
         std::map<uint64_t, std::shared_ptr<Primitive>> instances{};
 
         std::shared_ptr<char> mesh_storage{};
@@ -195,7 +195,6 @@ class CloudBVH : public Aggregate {
         const CloudBVH &bvh_;
     };
 
-    const std::string bvh_path_;
     const uint32_t bvh_root_;
     bool preloading_done_{false};
     bool load_materials_{false};
@@ -203,8 +202,6 @@ class CloudBVH : public Aggregate {
     mutable std::vector<std::unique_ptr<Treelet>> treelets_;
     mutable std::map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_;
     mutable std::map<uint32_t, std::shared_ptr<Material>> materials_;
-    mutable std::map<uint64_t, std::shared_ptr<Texture<Float>>> ftex_;
-    mutable std::map<uint64_t, std::shared_ptr<Texture<Spectrum>>> stex_;
     mutable std::map<uint32_t, std::pair<ParamSet, Transform>>
         area_light_params_;
 

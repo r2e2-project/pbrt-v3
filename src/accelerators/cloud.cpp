@@ -82,13 +82,8 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
                 continue;
             }
 
-            if (materials_.count(mkey.id) == 0) {
-                auto r = _manager.GetReader(ObjectType::Material, mkey.id);
-                protobuf::Material material;
-                r->read(&material);
-                materials_[mkey.id] =
-                    material::from_protobuf(material, ftex_, stex_);
-            }
+            materials_[mkey.id] =
+                treelets_[mkey.treelet]->included_material[mkey.id];
         }
 
         /* (2.B) create all the necessary external instances */
@@ -188,24 +183,9 @@ void CloudBVH::LoadTreelet(const uint32_t root_id, const char *buffer,
 
     auto &treelet = *treelets_[root_id];
 
-    /* load the materials */
+    /* create the placeholder materials */
     for (const auto mkey : treelet.required_materials) {
-        if (not mkey.id) {
-            materials_[mkey.id] = make_shared<PlaceholderMaterial>(mkey);
-            continue;
-        }
-
-        if (materials_.count(mkey.id) == 0) {
-            if (load_materials_) {
-                auto reader = _manager.GetReader(ObjectType::Material, mkey.id);
-                protobuf::Material material;
-                reader->read(&material);
-                materials_[mkey.id] =
-                    material::from_protobuf(material, ftex_, stex_);
-            } else {
-                materials_[mkey.id] = make_shared<PlaceholderMaterial>(mkey);
-            }
-        }
+        materials_[mkey.id] = make_shared<PlaceholderMaterial>(mkey);
     }
 
     /* create the instances */
@@ -311,6 +291,9 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
             _manager.getFileName(ObjectType::Texture, id), move(storage), len);
     }
 
+    std::map<uint64_t, std::shared_ptr<Texture<Float>>> ftexes;
+    std::map<uint64_t, std::shared_ptr<Texture<Spectrum>>> stexes;
+
     // SPECTRUM TEXTURES
     uint32_t included_spectrum_count = 0;
     reader.read(&included_spectrum_count);
@@ -325,7 +308,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
         protobuf::SpectrumTexture stex_proto;
         stex_proto.ParseFromArray(data, len);
-        stex_.emplace(id, spectrum_texture::from_protobuf(stex_proto));
+        stexes.emplace(id, spectrum_texture::from_protobuf(stex_proto));
     }
 
     // FLOAT TEXTURES
@@ -342,7 +325,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
         protobuf::FloatTexture ftex_proto;
         ftex_proto.ParseFromArray(data, len);
-        ftex_.emplace(id, float_texture::from_protobuf(ftex_proto));
+        ftexes.emplace(id, float_texture::from_protobuf(ftex_proto));
     }
 
     // MATERIALS
@@ -361,7 +344,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         material.ParseFromArray(data, len);
 
         treelet.included_material.emplace(
-            id, material::from_protobuf(material, ftex_, stex_));
+            id, material::from_protobuf(material, ftexes, stexes));
     }
 
     map<uint32_t, MaterialKey> mesh_material_ids;
