@@ -1,4 +1,4 @@
-#include "ring_buffer.hh"
+#include "ring_buffer.h"
 
 #include <sys/mman.h>
 #include <sys/syscall.h>
@@ -6,9 +6,10 @@
 
 #include <iostream>
 
-#include "exception.hh"
+#include "exception.h"
 
 using namespace std;
+using namespace pbrt;
 
 MMap_Region::MMap_Region(char* const addr, const size_t length, const int prot,
                          const int flags, const int fd, const off_t offset)
@@ -22,7 +23,7 @@ MMap_Region::MMap_Region(char* const addr, const size_t length, const int prot,
 MMap_Region::~MMap_Region() {
     if (addr_) {
         try {
-            SystemCall("munmap", munmap(addr_, length_));
+            CheckSystemCall("munmap", munmap(addr_, length_));
         } catch (const exception& e) {
             cerr << "Exception destructing MMap_Region: " << e.what() << endl;
         }
@@ -36,9 +37,9 @@ RingBuffer::RingBuffer(const size_t capacity)
                   "RingBuffer capacity must be multiple of page size (" +
                   to_string(sysconf(_SC_PAGESIZE)) + ")");
           }
-          FileDescriptor fd{SystemCall(
+          FileDescriptor fd{CheckSystemCall(
               "memfd_create", syscall(SYS_memfd_create, "RingBuffer", 0))};
-          SystemCall("ftruncate", ftruncate(fd.fd_num(), capacity));
+          CheckSystemCall("ftruncate", ftruncate(fd.fd_num(), capacity));
           return fd;
       }()),
       virtual_address_space_(nullptr, 2 * capacity, PROT_NONE,
@@ -50,7 +51,7 @@ RingBuffer::RingBuffer(const size_t capacity)
                       PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
                       fd_.fd_num()) {}
 
-std::string_view RingBuffer::writable_region() const {
+string_view RingBuffer::writable_region() const {
     return {virtual_address_space_.addr() + next_index_to_write_,
             capacity() - bytes_stored_};
 }
@@ -70,7 +71,7 @@ void RingBuffer::push(const size_t num_bytes) {
     bytes_stored_ += num_bytes;
 }
 
-std::string_view RingBuffer::readable_region() const {
+string_view RingBuffer::readable_region() const {
     const size_t next_index_to_read =
         (next_index_to_write_ + capacity() - bytes_stored_) % capacity();
 
@@ -90,5 +91,3 @@ size_t RingBuffer::write(const string_view str) {
     push(bytes_written);
     return bytes_written;
 }
-
-void RingBuffer::read_from(string_view& str) { str.remove_prefix(write(str)); }

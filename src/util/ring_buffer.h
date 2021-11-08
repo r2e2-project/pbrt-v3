@@ -61,7 +61,6 @@ class RingBuffer {
     void pop(const size_t num_bytes);
 
     size_t write(const string_view str);
-    void read_from(string_view& str);
 };
 
 }  // namespace pbrt
