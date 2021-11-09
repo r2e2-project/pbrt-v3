@@ -65,7 +65,7 @@ struct TriangleMesh {
                  const std::shared_ptr<Texture<Float>> &shadowAlphaMask,
                  const int *faceIndices);
 
-    TriangleMesh(const std::shared_ptr<char> buffer, const size_t offset);
+    TriangleMesh(const std::shared_ptr<char> &buffer, const size_t offset);
 
     // TriangleMesh Data
     const int nTriangles, nVertices;

@@ -121,7 +121,7 @@ TriangleMesh::TriangleMesh(
     }
 }
 
-TriangleMesh::TriangleMesh(const std::shared_ptr<char> buffer,
+TriangleMesh::TriangleMesh(const std::shared_ptr<char> &buffer,
                            const size_t tm_offset)
     : buffer(buffer),
       storage(buffer.get() + tm_offset),
