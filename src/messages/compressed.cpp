@@ -1,7 +1,7 @@
 #include "compressed.h"
 
-#include <stdexcept>
 #include <algorithm>
+#include <stdexcept>
 
 using namespace std;
 using namespace pbrt;
@@ -59,10 +59,8 @@ uint32_t CompressedReader::next_record_size() {
             throw runtime_error("unexpected end of stream");
     }
 
-    const auto rec_len = *reinterpret_cast<const uint32_t*>(
+    return *reinterpret_cast<const uint32_t*>(
         uncompressed_data_.readable_region().data());
-
-    return rec_len;
 }
 
 void CompressedReader::read(char* dst, size_t len) {
