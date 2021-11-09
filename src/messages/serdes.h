@@ -18,19 +18,19 @@ std::string serialize(const TriangleMesh& tm);
 namespace cloudbvh {
 
 struct TransformedPrimitive {
-    Matrix4x4 start_transform;
-    Matrix4x4 end_transform;
+    Matrix4x4 start_transform{};
+    Matrix4x4 end_transform{};
 
     struct __attribute__((packed, aligned(1))) {
-        Float start_time;
-        Float end_time;
-        uint64_t root_ref;
+        Float start_time{};
+        Float end_time{};
+        uint64_t root_ref{};
     };
 };
 
 struct __attribute__((packed, aligned(1))) Triangle {
-    uint32_t mesh_id;
-    uint32_t tri_number;
+    uint32_t mesh_id{};
+    uint32_t tri_number{};
 };
 
 }  // namespace cloudbvh
