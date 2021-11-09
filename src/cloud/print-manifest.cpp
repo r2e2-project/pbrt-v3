@@ -3,6 +3,7 @@
 
 #include "cloud/manager.h"
 #include "include/pbrt/common.h"
+#include "messages/compressed.h"
 #include "messages/lite.h"
 #include "messages/utils.h"
 #include "util/exception.h"
@@ -53,49 +54,45 @@ void print_treelet_info(const uint32_t treelet_id) {
     treelet_buffer.resize(size);
     fin.read(treelet_buffer.data(), size);
 
-    LiteRecordReader reader{treelet_buffer.data(), treelet_buffer.size()};
+    CompressedReader reader{treelet_buffer.data(), treelet_buffer.size()};
 
     size_t total_texture_size = 0;
-    uint32_t included_texture_count;
-    reader.read(&included_texture_count);
+    const uint32_t included_texture_count = reader.read<uint32_t>();
     for (size_t i = 0; i < included_texture_count; i++) {
         const uint32_t id = reader.read<uint32_t>();
         const auto l = reader.next_record_size();
-        reader.read(nullptr, l);
+        reader.read<string>();
         total_texture_size += l;
     }
 
     size_t total_spectrum_size = 0;
-    uint32_t included_spectrum_count = 0;
-    reader.read(&included_spectrum_count);
+    const uint32_t included_spectrum_count = reader.read<uint32_t>();
     for (size_t i = 0; i < included_spectrum_count; i++) {
         const uint32_t id = reader.read<uint32_t>();
         const auto l = reader.next_record_size();
-        reader.read(nullptr, l);
+        reader.read<string>();
         total_spectrum_size += l;
     }
 
     size_t total_float_size = 0;
-    uint32_t included_float_count = 0;
-    reader.read(&included_float_count);
+    const uint32_t included_float_count = reader.read<uint32_t>();
     for (size_t i = 0; i < included_float_count; i++) {
         const uint32_t id = reader.read<uint32_t>();
         const auto l = reader.next_record_size();
-        reader.read(nullptr, l);
+        reader.read<string>();
         total_float_size += l;
     }
 
     size_t total_material_size = 0;
-    uint32_t included_material_count = 0;
-    reader.read(&included_material_count);
+    const uint32_t included_material_count = reader.read<uint32_t>();
     for (size_t i = 0; i < included_material_count; i++) {
         const uint32_t id = reader.read<uint32_t>();
         const auto l = reader.next_record_size();
-        reader.read(nullptr, l);
+        reader.read<string>();
         total_material_size += l;
     }
 
-    uint32_t included_mesh_count = reader.read<uint32_t>();
+    const uint32_t included_mesh_count = reader.read<uint32_t>();
 
     cout << "\u21b3 TEX:  " << included_texture_count << "  \033[38;5;242m"
          << format_bytes(total_texture_size) << "\033[0m" << endl

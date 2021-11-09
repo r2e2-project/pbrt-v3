@@ -12,6 +12,7 @@
 #include "core/primitive.h"
 #include "lights/diffuse.h"
 #include "materials/matte.h"
+#include "messages/compressed.h"
 #include "messages/lite.h"
 #include "messages/serdes.h"
 #include "messages/serialization.h"
@@ -264,7 +265,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         length = treelet_buffer.size();
     }
 
-    LiteRecordReader reader{buffer, length};
+    CompressedReader reader{buffer, length};
 
     /* read in the textures & materials included in this treelet */
 
