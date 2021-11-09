@@ -62,12 +62,12 @@ uint32_t CompressedReader::next_record_size() {
         uncompressed_data_.readable_region().data());
 }
 
-void CompressedReader::read(char* dst, size_t len) {
+void CompressedReader::read(char* dst, size_t dst_len) {
     const size_t rec_len = next_record_size();
 
-    if (rec_len != len) {
+    if (rec_len != dst_len) {
         throw runtime_error(string("unexpected size: expected ") +
-                            to_string(len) + ", got " + to_string(rec_len));
+                            to_string(dst_len) + ", got " + to_string(rec_len));
     }
 
     uncompressed_data_.pop(sizeof(uint32_t));
@@ -77,25 +77,32 @@ void CompressedReader::read(char* dst, size_t len) {
             min(uncompressed_data_.readable_region().length(), rec_len);
         memcpy(dst, uncompressed_data_.readable_region().data(), read_len);
         uncompressed_data_.pop(read_len);
-        len -= read_len;
+        dst_len -= read_len;
         dst += read_len;
     }
 
-    if (not len) return;
+    if (not dst_len) return;
 
     // let's directly decompress to the buffer
     size_t src_size = len_;
-    size_t dst_size = len;
+    size_t dst_size = dst_len;
 
-    LZ4F_decompress(lz4frame_context_, dst, &dst_size, buffer_, &src_size,
-                    &lz4frame_options_);
+    const auto decomp_result =
+        LZ4F_decompress(lz4frame_context_, dst, &dst_size, buffer_, &src_size,
+                        &lz4frame_options_);
 
-    len -= dst_size;
-    len_ -= dst_size;
+    if (LZ4F_isError(decomp_result)) {
+        throw runtime_error("decompression failed: "s +
+                            LZ4F_getErrorName(decomp_result));
+    }
+
+    dst_len -= dst_size;
+    len_ -= src_size;
     buffer_ += src_size;
 
-    if (len != 0) {
-        throw runtime_error("got " + to_string(len) +
-                            " byte(s) fewer than excepted");
+    if (dst_len != 0) {
+        throw runtime_error("got " + to_string(dst_len) +
+                            " byte(s) fewer than excepted (record length: " +
+                            to_string(rec_len) + ")");
     }
 }
