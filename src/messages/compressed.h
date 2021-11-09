@@ -4,27 +4,20 @@
 #include <lz4.h>
 #include <lz4frame.h>
 
+#include "lite.h"
 #include "util/ring_buffer.h"
 
 namespace pbrt {
 
-class CompressedReader {
+class CompressedReader : public RecordReader {
   public:
     CompressedReader(const char* buffer, const size_t buffer_len);
     ~CompressedReader();
 
-    template <class T>
-    T read();
+    void read(char* dst, size_t len) override;
+    uint32_t next_record_size() override;
 
-    template <class T>
-    void read(T* t) {
-        read(reinterpret_cast<char*>(t), sizeof(T));
-    }
-
-    uint32_t next_record_size();
-
-    //! reads exactly `dst_len` bytes, throws an exception if failed
-    void read(char* dst, size_t len);
+    using RecordReader::read;
 
   private:
     void fill_uncompressed_buffer();

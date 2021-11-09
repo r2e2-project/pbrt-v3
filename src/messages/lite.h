@@ -5,9 +5,12 @@
 #include <stdexcept>
 #include <string>
 
-class LiteRecordReader {
+class RecordReader {
   public:
-    LiteRecordReader(const char* buffer, const size_t len);
+    //! reads exactly `dst_len` bytes, throws an exception if failed
+    virtual void read(char* dst, size_t len) = 0;
+
+    virtual uint32_t next_record_size() = 0;
 
     template <class T>
     T read();
@@ -16,11 +19,16 @@ class LiteRecordReader {
     void read(T* t) {
         read(reinterpret_cast<char*>(t), sizeof(T));
     }
+};
 
-    uint32_t next_record_size();
+class LiteRecordReader : public RecordReader {
+  public:
+    LiteRecordReader(const char* buffer, const size_t len);
 
-    //! reads exactly `dst_len` bytes, throws an exception if failed
-    void read(char* dst, size_t len);
+    uint32_t next_record_size() override;
+    void read(char* dst, size_t len) override;
+
+    using RecordReader::read;
 
   private:
     const char* buffer_{nullptr};

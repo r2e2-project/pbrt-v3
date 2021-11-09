@@ -5,6 +5,24 @@
 
 using namespace std;
 
+template <class T>
+T RecordReader::read() {
+    T res;
+    read(reinterpret_cast<char*>(&res), sizeof(T));
+    return res;
+}
+
+template <>
+std::string RecordReader::read() {
+    std::string res;
+    res.resize(next_record_size());
+    read(reinterpret_cast<char*>(&res[0]), res.size());
+    return res;
+}
+
+template uint32_t RecordReader::read<uint32_t>();
+template uint64_t RecordReader::read<uint64_t>();
+
 LiteRecordReader::LiteRecordReader(const char* buffer, const size_t len)
     : buffer_(buffer), len_(len), end_(buffer_ + len_) {}
 
@@ -15,24 +33,6 @@ uint32_t LiteRecordReader::next_record_size() {
 
     return *reinterpret_cast<const uint32_t*>(buffer_);
 }
-
-template <class T>
-T LiteRecordReader::read() {
-    T res;
-    read(reinterpret_cast<char*>(&res), sizeof(T));
-    return res;
-}
-
-template <>
-std::string LiteRecordReader::read() {
-    std::string res;
-    res.resize(next_record_size());
-    read(reinterpret_cast<char*>(&res[0]), res.size());
-    return res;
-}
-
-template uint32_t LiteRecordReader::read<uint32_t>();
-template uint64_t LiteRecordReader::read<uint64_t>();
 
 void LiteRecordReader::read(char* dst, size_t len) {
     const auto rec_len = next_record_size();

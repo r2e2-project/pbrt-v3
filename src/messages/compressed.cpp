@@ -34,24 +34,6 @@ CompressedReader::~CompressedReader() {
     LZ4F_freeDecompressionContext(lz4frame_context_);
 }
 
-template <class T>
-T CompressedReader::read() {
-    T t;
-    read(reinterpret_cast<char*>(&t), sizeof(T));
-    return t;
-}
-
-template <>
-string CompressedReader::read() {
-    std::string t;
-    t.resize(next_record_size());
-    read(reinterpret_cast<char*>(&t[0]), t.size());
-    return t;
-}
-
-template uint32_t CompressedReader::read<uint32_t>();
-template uint64_t CompressedReader::read<uint64_t>();
-
 void CompressedReader::fill_uncompressed_buffer() {
     size_t dst_size = uncompressed_data_.writable_region().length();
     size_t src_size = len_;
