@@ -7,16 +7,20 @@
 
 class LiteRecordReader {
   public:
-    LiteRecordReader() = default;
     LiteRecordReader(const char* buffer, const size_t len);
 
-    bool read(const char** buf, size_t* len);
+    template <class T>
+    T read();
 
     template <class T>
-    bool read(T* t);
+    void read(T* t) {
+        read(reinterpret_cast<char*>(t), sizeof(T));
+    }
 
-    const char* cur() const { return buffer_; }
-    bool eof() const { return buffer_ == end_; }
+    uint32_t next_record_size();
+
+    //! reads exactly `dst_len` bytes, throws an exception if failed
+    void read(char* dst, size_t len);
 
   private:
     const char* buffer_{nullptr};
@@ -32,7 +36,7 @@ class LiteRecordWriter {
     void write(const char* buf, const uint32_t len);
     void write(const std::string& str) { write(str.data(), str.length()); }
 
-    void write_raw(const std::string &str);
+    void write_raw(const std::string& str);
 
     template <class T>
     void write(const T& t);
@@ -43,23 +47,6 @@ class LiteRecordWriter {
   private:
     std::ofstream fout_{};
 };
-
-template <class T>
-bool LiteRecordReader::read(T* t) {
-    size_t out_len;
-    const char* ptr;
-    bool result = read(&ptr, &out_len);
-
-    if (out_len != sizeof(T)) {
-        throw std::runtime_error(std::string("unexpected size: expected ") +
-                                 std::to_string(sizeof(T)) + ", got " +
-                                 std::to_string(out_len));
-    }
-
-    *t = *reinterpret_cast<const T*>(ptr);
-
-    return result;
-}
 
 template <class T>
 void LiteRecordWriter::write(const T& t) {

@@ -59,10 +59,9 @@ void print_treelet_info(const uint32_t treelet_id) {
     uint32_t included_texture_count;
     reader.read(&included_texture_count);
     for (size_t i = 0; i < included_texture_count; i++) {
-        uint32_t id;
-        reader.read(&id);
-        size_t l;
-        reader.read(nullptr, &l);
+        const uint32_t id = reader.read<uint32_t>();
+        const auto l = reader.next_record_size();
+        reader.read(nullptr, l);
         total_texture_size += l;
     }
 
@@ -70,10 +69,9 @@ void print_treelet_info(const uint32_t treelet_id) {
     uint32_t included_spectrum_count = 0;
     reader.read(&included_spectrum_count);
     for (size_t i = 0; i < included_spectrum_count; i++) {
-        uint32_t id;
-        reader.read(&id);
-        size_t l;
-        reader.read(nullptr, &l);
+        const uint32_t id = reader.read<uint32_t>();
+        const auto l = reader.next_record_size();
+        reader.read(nullptr, l);
         total_spectrum_size += l;
     }
 
@@ -81,10 +79,9 @@ void print_treelet_info(const uint32_t treelet_id) {
     uint32_t included_float_count = 0;
     reader.read(&included_float_count);
     for (size_t i = 0; i < included_float_count; i++) {
-        uint32_t id;
-        reader.read(&id);
-        size_t l;
-        reader.read(nullptr, &l);
+        const uint32_t id = reader.read<uint32_t>();
+        const auto l = reader.next_record_size();
+        reader.read(nullptr, l);
         total_float_size += l;
     }
 
@@ -92,15 +89,13 @@ void print_treelet_info(const uint32_t treelet_id) {
     uint32_t included_material_count = 0;
     reader.read(&included_material_count);
     for (size_t i = 0; i < included_material_count; i++) {
-        uint32_t id;
-        reader.read(&id);
-        size_t l;
-        reader.read(nullptr, &l);
+        const uint32_t id = reader.read<uint32_t>();
+        const auto l = reader.next_record_size();
+        reader.read(nullptr, l);
         total_material_size += l;
     }
 
-    uint32_t included_mesh_count = 0;
-    reader.read(&included_mesh_count);
+    uint32_t included_mesh_count = reader.read<uint32_t>();
 
     cout << "\u21b3 TEX:  " << included_texture_count << "  \033[38;5;242m"
          << format_bytes(total_texture_size) << "\033[0m" << endl

@@ -1,29 +1,54 @@
 #include "lite.h"
 
+#include <cstring>
+#include <iostream>
+
 using namespace std;
 
 LiteRecordReader::LiteRecordReader(const char* buffer, const size_t len)
     : buffer_(buffer), len_(len), end_(buffer_ + len_) {}
 
-bool LiteRecordReader::read(const char** out_buffer, size_t* out_len) {
-    // first 4 bytes are the record length
-    if (buffer_ + 4 > end_) {
-        return false;
+uint32_t LiteRecordReader::next_record_size() {
+    if (buffer_ + sizeof(uint32_t) > end_) {
+        throw runtime_error("unexcepted end of stream");
     }
 
-    const uint32_t* record_len = reinterpret_cast<const uint32_t*>(buffer_);
+    return *reinterpret_cast<const uint32_t*>(buffer_);
+}
 
-    if (out_len != nullptr) {
-        *out_len = *record_len;
+template <class T>
+T LiteRecordReader::read() {
+    T res;
+    read(reinterpret_cast<char*>(&res), sizeof(T));
+    return res;
+}
+
+template <>
+std::string LiteRecordReader::read() {
+    std::string res;
+    res.resize(next_record_size());
+    read(reinterpret_cast<char*>(&res[0]), res.size());
+    return res;
+}
+
+template uint32_t LiteRecordReader::read<uint32_t>();
+template uint64_t LiteRecordReader::read<uint64_t>();
+
+void LiteRecordReader::read(char* dst, size_t len) {
+    const auto rec_len = next_record_size();
+
+    if (rec_len != len) {
+        throw runtime_error(string("unexpected size: expected ") +
+                            to_string(len) + ", got " + to_string(rec_len));
     }
 
-    if (out_buffer != nullptr) {
-        *out_buffer = buffer_ + 4;
+    buffer_ += sizeof(uint32_t);
+
+    if (dst != nullptr) {
+        memcpy(dst, buffer_, rec_len);
     }
 
-    buffer_ += (*record_len) + 4;
-
-    return buffer_ <= end_;
+    buffer_ += rec_len;
 }
 
 void LiteRecordWriter::write(const char* buf, const uint32_t len) {

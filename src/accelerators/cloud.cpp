@@ -267,20 +267,15 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     LiteRecordReader reader{buffer, length};
 
     /* read in the textures & materials included in this treelet */
-    uint32_t included_texture_count = 0;
-    reader.read(&included_texture_count);
 
     // PTEX TEXTURES
+    const auto included_texture_count = reader.read<uint32_t>();
     for (size_t i = 0; i < included_texture_count; i++) {
-        uint32_t id;
-        reader.read(&id);
+        const uint32_t id = reader.read<uint32_t>();
 
-        const char *data;
-        size_t len;
-        reader.read(&data, &len);
-
+        const size_t len = reader.next_record_size();
         shared_ptr<char> storage{new char[len], default_delete<char[]>()};
-        memcpy(storage.get(), data, len);
+        reader.read(storage.get(), len);
 
         _manager.addInMemoryTexture(
             _manager.getFileName(ObjectType::Texture, id), move(storage), len);
@@ -290,54 +285,32 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     std::map<uint64_t, std::shared_ptr<Texture<Spectrum>>> stexes;
 
     // SPECTRUM TEXTURES
-    uint32_t included_spectrum_count = 0;
-    reader.read(&included_spectrum_count);
-
+    const uint32_t included_spectrum_count = reader.read<uint32_t>();
     for (size_t i = 0; i < included_spectrum_count; i++) {
-        uint32_t id;
-        reader.read(&id);
-
-        const char *data;
-        size_t len;
-        reader.read(&data, &len);
-
+        const uint32_t id = reader.read<uint32_t>();
+        const string data = reader.read<string>();
         protobuf::SpectrumTexture stex_proto;
-        stex_proto.ParseFromArray(data, len);
+        stex_proto.ParseFromString(data);
         stexes.emplace(id, spectrum_texture::from_protobuf(stex_proto));
     }
 
     // FLOAT TEXTURES
-    uint32_t included_float_count = 0;
-    reader.read(&included_float_count);
-
+    const uint32_t included_float_count = reader.read<uint32_t>();
     for (size_t i = 0; i < included_float_count; i++) {
-        uint32_t id;
-        reader.read(&id);
-
-        const char *data;
-        size_t len;
-        reader.read(&data, &len);
-
+        const uint32_t id = reader.read<uint32_t>();
+        const string data = reader.read<string>();
         protobuf::FloatTexture ftex_proto;
-        ftex_proto.ParseFromArray(data, len);
+        ftex_proto.ParseFromString(data);
         ftexes.emplace(id, float_texture::from_protobuf(ftex_proto));
     }
 
     // MATERIALS
-    uint32_t included_material_count = 0;
-    reader.read(&included_material_count);
-
+    const uint32_t included_material_count = reader.read<uint32_t>();
     for (size_t i = 0; i < included_material_count; i++) {
-        uint32_t id;
-        reader.read(&id);
-
-        const char *data;
-        size_t len;
-        reader.read(&data, &len);
-
+        const uint32_t id = reader.read<uint32_t>();
+        const string data = reader.read<string>();
         protobuf::Material material;
-        material.ParseFromArray(data, len);
-
+        material.ParseFromString(data);
         treelet.included_material.emplace(
             id, material::from_protobuf(material, ftexes, stexes));
     }
@@ -346,70 +319,30 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     map<uint32_t, uint32_t> mesh_area_light_id;
 
     /* read in the triangle meshes for this treelet */
-    uint32_t num_triangle_meshes = 0;
-    reader.read(&num_triangle_meshes);
-
-    const char *tm_buff_start = reader.cur();
-    const char *tm_buff_end = tm_buff_start;
+    const uint32_t num_triangle_meshes = reader.read<uint32_t>();
 
     // find the start and the end of the buffer for meshes
     for (int i = 0; i < num_triangle_meshes; ++i) {
-        uint64_t tm_id;
         MaterialKey material_key;
-        uint32_t area_light_id;
 
-        reader.read(&tm_id);
+        const uint64_t tm_id = reader.read<uint64_t>();
         reader.read(&material_key);
-        reader.read(&area_light_id);
+        const uint32_t area_light_id = reader.read<uint32_t>();
 
-        const char *tm_buffer;
-        size_t tm_buffer_len;
-        reader.read(&tm_buffer, &tm_buffer_len);
-        tm_buff_end = tm_buffer + tm_buffer_len;
-    }
+        const size_t len = reader.next_record_size();
+        shared_ptr<char> storage{new char[len], default_delete<char[]>()};
+        reader.read(storage.get(), len);
 
-    {
-        const size_t len = static_cast<size_t>(tm_buff_end - tm_buff_start);
-        treelet.mesh_storage =
-            shared_ptr<char>(new char[len], default_delete<char[]>());
-        memcpy(treelet.mesh_storage.get(), tm_buff_start, len);
+        tree_meshes.emplace(tm_id, make_shared<TriangleMesh>(storage, 0));
+        mesh_material_ids[tm_id] = material_key;
 
-        char *mesh_storage_start = treelet.mesh_storage.get();
-
-        LiteRecordReader tm_reader{treelet.mesh_storage.get(), len};
-
-        for (int i = 0; i < num_triangle_meshes; i++) {
-            uint64_t tm_id;
-            MaterialKey material_key;
-            uint32_t area_light_id;
-
-            tm_reader.read(&tm_id);
-            tm_reader.read(&material_key);
-            tm_reader.read(&area_light_id);
-
-            const char *tm_buffer;
-            size_t tm_buffer_len;
-            tm_reader.read(&tm_buffer, &tm_buffer_len);
-
-            auto p = tree_meshes.emplace(
-                tm_id,
-                std::make_shared<TriangleMesh>(treelet.mesh_storage,
-                                               tm_buffer - mesh_storage_start));
-
-            CHECK_EQ(p.second, true);
-            mesh_material_ids[tm_id] = material_key;
-
-            if (area_light_id) {
-                mesh_area_light_id[tm_id] = area_light_id;
-            }
+        if (area_light_id) {
+            mesh_area_light_id[tm_id] = area_light_id;
         }
     }
 
-    uint32_t node_count;
-    uint32_t primitive_count;
-
-    reader.read(&node_count);
-    reader.read(&primitive_count);
+    const uint32_t node_count = reader.read<uint32_t>();
+    const uint32_t primitive_count = reader.read<uint32_t>();
 
     if (node_count == 0) {
         return;
@@ -418,44 +351,37 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     nodes.resize(node_count);
     tree_primitives.reserve(primitive_count);
 
-    const char *nodes_buffer;
-    size_t nodes_buf_len;
-
-    reader.read(&nodes_buffer, &nodes_buf_len);
-    memcpy(&nodes[0], nodes_buffer, nodes_buf_len);
+    reader.read(reinterpret_cast<char *>(&nodes[0]),
+                node_count * sizeof(TreeletNode));
 
     for (auto &node : nodes) {
-        const serdes::cloudbvh::TransformedPrimitive *serdes_primitive;
-        const serdes::cloudbvh::Triangle *serdes_triangle;
+        serdes::cloudbvh::TransformedPrimitive serdes_primitive;
+        serdes::cloudbvh::Triangle serdes_triangle;
 
-        uint32_t transformed_primitives_count;
-        uint32_t triangles_count;
-
-        reader.read(&transformed_primitives_count);
-        reader.read(&triangles_count);
+        const uint32_t transformed_primitives_count = reader.read<uint32_t>();
+        const uint32_t triangles_count = reader.read<uint32_t>();
 
         for (int i = 0; i < transformed_primitives_count; i++) {
-            reader.read(reinterpret_cast<const char **>(&serdes_primitive),
-                        nullptr);
+            reader.read(&serdes_primitive);
 
-            tree_transforms.push_back(move(
-                make_unique<Transform>(serdes_primitive->start_transform)));
+            tree_transforms.push_back(
+                move(make_unique<Transform>(serdes_primitive.start_transform)));
             const Transform *start = tree_transforms.back().get();
 
             const Transform *end;
-            if (start->GetMatrix() != serdes_primitive->end_transform) {
+            if (start->GetMatrix() != serdes_primitive.end_transform) {
                 tree_transforms.push_back(move(
-                    make_unique<Transform>(serdes_primitive->end_transform)));
+                    make_unique<Transform>(serdes_primitive.end_transform)));
                 end = tree_transforms.back().get();
             } else {
                 end = start;
             }
 
             AnimatedTransform primitive_to_world{
-                start, serdes_primitive->start_time, end,
-                serdes_primitive->end_time};
+                start, serdes_primitive.start_time, end,
+                serdes_primitive.end_time};
 
-            uint64_t instance_ref = serdes_primitive->root_ref;
+            uint64_t instance_ref = serdes_primitive.root_ref;
 
             uint16_t instance_group = (uint16_t)(instance_ref >> 32);
             uint32_t instance_node = (uint32_t)instance_ref;
@@ -480,11 +406,10 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         }
 
         for (int i = 0; i < triangles_count; i++) {
-            reader.read(reinterpret_cast<const char **>(&serdes_triangle),
-                        nullptr);
+            reader.read(&serdes_triangle);
 
-            const auto mesh_id = serdes_triangle->mesh_id;
-            const auto tri_number = serdes_triangle->tri_number;
+            const auto mesh_id = serdes_triangle.mesh_id;
+            const auto tri_number = serdes_triangle.tri_number;
             const auto material_key = mesh_material_ids[mesh_id];
             const auto area_light_id = mesh_area_light_id.count(mesh_id)
                                            ? mesh_area_light_id.at(mesh_id)
