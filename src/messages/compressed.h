@@ -16,6 +16,11 @@ class CompressedReader {
     template <class T>
     T read();
 
+    template <class T>
+    void read(T* t) {
+        read(reinterpret_cast<char*>(t), sizeof(T));
+    }
+
     uint32_t next_record_size();
 
     //! reads exactly `dst_len` bytes, throws an exception if failed
@@ -24,8 +29,8 @@ class CompressedReader {
   private:
     void fill_uncompressed_buffer();
 
-    const char* compressed_data_;
-    size_t len_;
+    const char* buffer_{nullptr};
+    size_t len_{0};
 
     LZ4F_dctx* lz4frame_context_;
     LZ4F_frameInfo_t lz4frame_info_;
@@ -33,13 +38,6 @@ class CompressedReader {
 
     RingBuffer uncompressed_data_{16 * 1024 * 1024};  // 16 MiB
 };
-
-template <class T>
-T CompressedReader::read() {
-    T res;
-    read(&res, sizeof(T));
-    return res;
-}
 
 }  // namespace pbrt
 

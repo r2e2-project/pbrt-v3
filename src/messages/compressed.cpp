@@ -7,7 +7,7 @@ using namespace std;
 using namespace pbrt;
 
 CompressedReader::CompressedReader(const char* buffer, const size_t buffer_len)
-    : compressed_data_(buffer),
+    : buffer_(buffer),
       len_(buffer_len),
       lz4frame_context_([] {
           LZ4F_dctx* tmp;
@@ -20,10 +20,9 @@ CompressedReader::CompressedReader(const char* buffer, const size_t buffer_len)
       lz4frame_info_([this] {
           LZ4F_frameInfo_t info;
           size_t src_size = len_;
-          LZ4F_getFrameInfo(lz4frame_context_, &info, compressed_data_,
-                            &src_size);
+          LZ4F_getFrameInfo(lz4frame_context_, &info, buffer_, &src_size);
 
-          compressed_data_ += src_size;
+          buffer_ += src_size;
           len_ -= src_size;
           return info;
       }()) {
@@ -35,6 +34,24 @@ CompressedReader::~CompressedReader() {
     LZ4F_freeDecompressionContext(lz4frame_context_);
 }
 
+template <class T>
+T CompressedReader::read() {
+    T t;
+    read(reinterpret_cast<char*>(&t), sizeof(T));
+    return t;
+}
+
+template <>
+string CompressedReader::read() {
+    std::string t;
+    t.resize(next_record_size());
+    read(reinterpret_cast<char*>(&t[0]), t.size());
+    return t;
+}
+
+template uint32_t CompressedReader::read<uint32_t>();
+template uint64_t CompressedReader::read<uint64_t>();
+
 void CompressedReader::fill_uncompressed_buffer() {
     size_t dst_size = uncompressed_data_.writable_region().length();
     size_t src_size = len_;
@@ -45,9 +62,9 @@ void CompressedReader::fill_uncompressed_buffer() {
 
     LZ4F_decompress(lz4frame_context_,
                     uncompressed_data_.writable_region().mutable_data(),
-                    &dst_size, compressed_data_, &src_size, &lz4frame_options_);
+                    &dst_size, buffer_, &src_size, &lz4frame_options_);
 
-    compressed_data_ += src_size;
+    buffer_ += src_size;
     uncompressed_data_.push(dst_size);
 }
 
@@ -88,12 +105,12 @@ void CompressedReader::read(char* dst, size_t len) {
     size_t src_size = len_;
     size_t dst_size = len;
 
-    LZ4F_decompress(lz4frame_context_, dst, &dst_size, compressed_data_,
-                    &src_size, &lz4frame_options_);
+    LZ4F_decompress(lz4frame_context_, dst, &dst_size, buffer_, &src_size,
+                    &lz4frame_options_);
 
     len -= dst_size;
     len_ -= dst_size;
-    compressed_data_ += src_size;
+    buffer_ += src_size;
 
     if (len != 0) {
         throw runtime_error("got " + to_string(len) +
