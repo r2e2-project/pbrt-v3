@@ -16,6 +16,7 @@
 #include "pbrt.h"
 #include "pbrt/raystate.h"
 #include "primitive.h"
+#include "texture.h"
 #include "transform.h"
 
 namespace pbrt {
@@ -219,6 +220,7 @@ class CloudBVH : public Aggregate {
                          std::vector<Bounds3f> &treeletBounds) const;
 
     Transform identity_transform_;
+    std::shared_ptr<Texture<Float>> zeroAlphaTexture;
 };
 
 std::shared_ptr<CloudBVH> CreateCloudBVH(const ParamSet &ps);

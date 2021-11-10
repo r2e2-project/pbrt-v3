@@ -19,6 +19,7 @@
 #include "messages/utils.h"
 #include "pbrt.pb.h"
 #include "shapes/triangle.h"
+#include "textures/constant.h"
 
 using namespace std;
 
@@ -35,7 +36,8 @@ struct membuf : streambuf {
 };
 
 CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all)
-    : bvh_root_(bvh_root) {
+    : bvh_root_(bvh_root),
+      zeroAlphaTexture(std::make_shared<ConstantTexture<Float>>(0.f)) {
     ProfilePhase _(Prof::AccelConstruction);
 
     if (MaxThreadIndex() > 1 && !preload_all) {
@@ -343,6 +345,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         mesh_material_ids[tm_id] = material_key;
 
         if (area_light_id) {
+            tree_meshes.at(tm_id)->alphaMask = zeroAlphaTexture;
             mesh_area_light_id[tm_id] = area_light_id;
         }
     }
