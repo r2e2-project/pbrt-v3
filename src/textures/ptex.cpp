@@ -66,7 +66,7 @@ class : public PtexInputHandler {
     Handle open(const char *path) override {
         auto tex = global::manager.getInMemoryTexture(path);
         openedTextures.emplace_back(
-            std::make_unique<OpenedTexture>(std::move(tex.first), tex.second));
+            std::make_unique<OpenedTexture>(tex.first, tex.second));
         return reinterpret_cast<Handle>(openedTextures.back().get());
     }
 
@@ -101,8 +101,8 @@ class : public PtexInputHandler {
 
   private:
     struct OpenedTexture {
-        OpenedTexture(std::shared_ptr<char> &&data, const size_t length)
-            : data(std::move(data)), length(length) {}
+        OpenedTexture(const std::shared_ptr<char> &data, const size_t length)
+            : data(data), length(length) {}
 
         std::shared_ptr<char> data;
         size_t length;
@@ -125,7 +125,7 @@ PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
 
         if (global::manager.hasInMemoryTextures()) {
             maxFiles = 1'000;
-            maxMem = 1ull << 30; // 1GB
+            maxMem = 1ull << 30;  // 1GB
         }
 
         bool premultiply = true;
