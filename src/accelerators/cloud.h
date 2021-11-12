@@ -74,7 +74,8 @@ class CloudBVH : public Aggregate {
     void LoadTreelet(const uint32_t root_id, const char *buffer = nullptr,
                      const size_t length = 0) const;
 
-    std::shared_ptr<Material> GetMaterial(const uint32_t material_id) const;
+    const std::shared_ptr<Material> &GetMaterial(
+        const uint32_t material_id) const;
 
     const TreeletInfo &GetInfo(const uint32_t treelet_id) {
         throw std::runtime_error("not implemented");

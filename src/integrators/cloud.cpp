@@ -52,14 +52,17 @@ tuple<RayStatePtr, RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
     auto &rayState = *rayStatePtr;
 
     SurfaceInteraction &it = rayState.hitInfo.isect;
-    auto material = treelet.GetMaterial(rayState.hitInfo.material.id);
 
-    // the next two lines are basically:
-    // it.ComputeScatteringFunctions(rayState.ray, arena, true);
-    it.ComputeDifferentials(rayState.ray);
-    if (material) {
-        material->ComputeScatteringFunctions(
-            &it, arena, pbrt::TransportMode::Radiance, true);
+    if (rayState.hitInfo.material.id) {
+        auto &material = treelet.GetMaterial(rayState.hitInfo.material.id);
+
+        // the next two lines are basically:
+        // it.ComputeScatteringFunctions(rayState.ray, arena, true);
+        it.ComputeDifferentials(rayState.ray);
+        if (material) {
+            material->ComputeScatteringFunctions(
+                &it, arena, pbrt::TransportMode::Radiance, true);
+        }
     }
 
     if (!it.bsdf) {

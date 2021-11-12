@@ -110,8 +110,8 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all)
 
 CloudBVH::~CloudBVH() {}
 
-shared_ptr<Material> CloudBVH::GetMaterial(const uint32_t material_id) const {
-    if (not material_id) return nullptr;
+const shared_ptr<Material> &CloudBVH::GetMaterial(
+    const uint32_t material_id) const {
     return treelets_.at(bvh_root_)->included_material.at(material_id);
 }
 
