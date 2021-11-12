@@ -122,6 +122,12 @@ PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
         CHECK_EQ(nActiveTextures, 0);
         int maxFiles = 100;
         size_t maxMem = 1ull << 32;  // 4GB
+
+        if (global::manager.hasInMemoryTextures()) {
+            maxFiles = 1'000;
+            maxMem = 1ull << 30; // 1GB
+        }
+
         bool premultiply = true;
 
         cache = Ptex::PtexCache::create(maxFiles, maxMem, premultiply,
