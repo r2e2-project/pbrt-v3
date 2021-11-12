@@ -716,6 +716,7 @@ shared_ptr<Material> material::from_protobuf(
     }
 
     TextureParams tp{geom_params, material_params, ftex, stex};
+    tp.FindString("type", ""); // to avoid unused warning
 
     return pbrt::MakeMaterial(mtl.name(), tp);
 }
