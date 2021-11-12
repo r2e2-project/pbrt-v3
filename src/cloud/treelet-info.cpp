@@ -1,123 +1,100 @@
-#include <cstdlib>
-#include <iomanip>
 #include <iostream>
-#include <map>
-#include <queue>
-#include <sstream>
-#include <string>
-#include <vector>
+#include <fstream>
+#include <memory>
 
-#include "accelerators/cloud.h"
 #include "cloud/manager.h"
-#include "core/geometry.h"
+#include "include/pbrt/common.h"
+#include "messages/compressed.h"
+#include "messages/lite.h"
+#include "messages/utils.h"
 #include "util/exception.h"
 #include "util/path.h"
 
 using namespace std;
 using namespace pbrt;
 
-void usage(const char *argv0) { cerr << argv0 << " OP SCENE-PATH NUM" << endl; }
+auto &_manager = global::manager;
 
-void generateReport(const roost::path &scenePath,
-                    const map<uint32_t, CloudBVH::TreeletInfo> &treeletInfo,
-                    const map<uint32_t, size_t> &treeletSize) {
-    map<uint32_t, size_t> totalSize = treeletSize;
-
-    for (const auto &item : treeletInfo) {
-        const auto id = item.first;
-        const auto &info = item.second;
-
-        for (const auto t : info.instances) {
-            totalSize[id] += treeletSize.at(t.first);
-        }
-    }
-
-    queue<uint32_t> toVisit;
-    toVisit.push(0);
-
-    while (!toVisit.empty()) {
-        const auto c = toVisit.front();
-        toVisit.pop();
-
-        cout << "T" << c << " = " << fixed << setprecision(2)
-             << (1.0 * totalSize[c] / (1 << 20)) << " MiB" << endl;
-
-        for (const auto t : treeletInfo.at(c).children) {
-            toVisit.push(t);
-        }
-    }
+void usage(const char *argv0) {
+    cerr << argv0 << " SCENE-PATH TREELET-NUM" << endl;
 }
 
-string toString(const Bounds3f &bounds) {
-    ostringstream oss;
+void print_treelet_info(const uint32_t treelet_id) {
+    vector<char> treelet_buffer;
 
-    oss << fixed << setprecision(3) << "[[" << bounds.pMin.x << ','
-        << bounds.pMin.y << ',' << bounds.pMin.z << "],[" << bounds.pMax.x
-        << ',' << bounds.pMax.y << ',' << bounds.pMax.z << "]]";
+    const string treelet_path =
+        _manager.getScenePath() + "/" +
+        _manager.getFileName(ObjectType::Treelet, treelet_id);
 
-    return oss.str();
-}
+    ifstream fin{treelet_path, ios::binary | ios::ate};
 
-void printTreeletInfo(const map<uint32_t, CloudBVH::TreeletInfo> &treeletInfo,
-                      const map<uint32_t, size_t> &treeletSize) {
-#if 0
-    cout << "TREELETS " << treeletInfo.size() << '\n';
-
-    for (const auto &item : treeletInfo) {
-        const auto id = item.first;
-        const auto &info = item.second;
-
-        cout << "TREELET " << id << " " << treeletSize.at(id) << '\n';
-
-        cout << "BVH_NODES [";
-        for (int i = 1; i < info.treeletNodeBounds.size(); i++) {
-            if (info.treeletNodeBounds[i].pMin.x >
-                info.treeletNodeBounds[i].pMax.x) {
-                cout << "null";
-
-            } else {
-                cout << toString(info.treeletNodeBounds[i]);
-            }
-
-            if (i != info.treeletNodeBounds.size() - 1) cout << ',';
-        }
-        cout << "]\n";
-
-        cout << "CHILD";
-        for (const auto t : info.children) {
-            cout << " " << t;
-        }
-        cout << '\n';
-
-        cout << "INSTANCE";
-        for (const auto t : info.instances) {
-            cout << " " << t.first;
-        }
-        cout << '\n';
-    }
-#endif
-}
-
-void generateGraph(const map<uint32_t, CloudBVH::TreeletInfo> &treeletInfo) {
-    cout << "digraph bvh {" << endl;
-
-    for (const auto &item : treeletInfo) {
-        const auto id = item.first;
-        const auto &info = item.second;
-
-        for (const auto t : info.children) {
-            cout << "  "
-                 << "T" << id << " -> T" << t << endl;
-        }
-
-        for (const auto t : info.instances) {
-            cout << "  "
-                 << "T" << id << " -> T" << t.first << " [style=dotted]"
-                 << endl;
-        }
+    if (!fin.good()) {
+        throw runtime_error("Could not open treelet file: " + treelet_path);
     }
 
-    cout << "}" << endl;
+    streamsize size = fin.tellg();
+    fin.seekg(0, ios::beg);
+
+    treelet_buffer.resize(size);
+    fin.read(treelet_buffer.data(), size);
+
+    unique_ptr<RecordReader> reader;
+    if (*reinterpret_cast<const uint32_t *>(treelet_buffer.data()) ==
+        0x184D2204) {
+        reader = make_unique<CompressedReader>(treelet_buffer.data(),
+                                               treelet_buffer.size());
+    } else {
+        reader = make_unique<LiteRecordReader>(treelet_buffer.data(),
+                                               treelet_buffer.size());
+    }
+
+    size_t total_texture_size = 0;
+    const uint32_t included_texture_count = reader->read<uint32_t>();
+    for (size_t i = 0; i < included_texture_count; i++) {
+        const uint32_t id = reader->read<uint32_t>();
+        const auto l = reader->next_record_size();
+        reader->read<string>();
+        total_texture_size += l;
+    }
+
+    size_t total_spectrum_size = 0;
+    const uint32_t included_spectrum_count = reader->read<uint32_t>();
+    for (size_t i = 0; i < included_spectrum_count; i++) {
+        const uint32_t id = reader->read<uint32_t>();
+        const auto l = reader->next_record_size();
+        reader->read<string>();
+        total_spectrum_size += l;
+    }
+
+    size_t total_float_size = 0;
+    const uint32_t included_float_count = reader->read<uint32_t>();
+    for (size_t i = 0; i < included_float_count; i++) {
+        const uint32_t id = reader->read<uint32_t>();
+        const auto l = reader->next_record_size();
+        reader->read<string>();
+        total_float_size += l;
+    }
+
+    size_t total_material_size = 0;
+    const uint32_t included_material_count = reader->read<uint32_t>();
+    for (size_t i = 0; i < included_material_count; i++) {
+        const uint32_t id = reader->read<uint32_t>();
+        const auto l = reader->next_record_size();
+        reader->read<string>();
+        total_material_size += l;
+    }
+
+    const uint32_t included_mesh_count = reader->read<uint32_t>();
+
+    cout << "\u21b3 TEX:  " << included_texture_count << "  \033[38;5;242m"
+         << format_bytes(total_texture_size) << "\033[0m" << endl
+         << "\u21b3 STEX: " << included_spectrum_count << "  \033[38;5;242m"
+         << format_bytes(total_spectrum_size) << "\033[0m" << endl
+         << "\u21b3 FTEX: " << included_float_count << "  \033[38;5;242m"
+         << format_bytes(total_float_size) << "\033[0m" << endl
+         << "\u21b3 MAT:  " << included_material_count << "  \033[38;5;242m"
+         << format_bytes(total_material_size) << "\033[0m" << endl
+         << "\u21b3 MESH: " << included_mesh_count << endl;
 }
 
 int main(int argc, char const *argv[]) {
@@ -126,7 +103,7 @@ int main(int argc, char const *argv[]) {
             abort();
         }
 
-        if (argc != 4) {
+        if (argc != 3) {
             usage(argv[0]);
             return EXIT_FAILURE;
         }
@@ -135,29 +112,11 @@ int main(int argc, char const *argv[]) {
         FLAGS_minloglevel = 3;
         PbrtOptions.nThreads = 1;
 
-        const string operation{argv[1]};
-        const roost::path scenePath{argv[2]};
-        const uint32_t treeletCount = stoul(argv[3]);
-        global::manager.init(scenePath.string());
+        const roost::path scene_path{argv[1]};
+        const uint32_t treelet_id = stoul(argv[2]);
+        _manager.init(scene_path.string());
 
-        auto filename = [](const uint32_t tId) { return "T" + to_string(tId); };
-        map<uint32_t, CloudBVH::TreeletInfo> treeletInfo;
-        map<uint32_t, size_t> treeletSize;
-
-        for (uint32_t i = 0; i < treeletCount; i++) {
-            CloudBVH bvh{i, false};
-            treeletInfo[i] = bvh.GetInfo(i);
-            treeletSize[i] = roost::file_size(scenePath / filename(i));
-        }
-
-        if (operation == "report") {
-            generateReport(scenePath, treeletInfo, treeletSize);
-        } else if (operation == "graph") {
-            generateGraph(treeletInfo);
-        } else if (operation == "info") {
-            printTreeletInfo(treeletInfo, treeletSize);
-        }
-
+        print_treelet_info(treelet_id);
     } catch (const exception &e) {
         print_exception(argv[0], e);
         return EXIT_FAILURE;
