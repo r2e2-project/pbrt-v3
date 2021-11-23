@@ -30,6 +30,8 @@ class ImagePartition {
                    const ImageWrap wrap_mode, const int padding = 1);
 
     RGBSpectrum Lookup(const Point2f &st) const;
+
+    void WriteImage(const std::string &filename);
 };
 
 class PartitionedImage {

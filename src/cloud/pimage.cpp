@@ -161,9 +161,11 @@ ImagePartition::ImagePartition(const Point2i &resolution,
             data[i + W * j] = get_color(s, t);
         }
     }
+}
 
-    WriteImage(to_string(partition_idx) + ".png", (Float *)data.get(),
-               {Point2i(0, 0), Point2i(W, H)}, Point2i(W, H));
+void ImagePartition::WriteImage(const string &filename) {
+    pbrt::WriteImage(filename, (Float *)data.get(),
+                     {Point2i(0, 0), Point2i(W, H)}, Point2i(W, H));
 }
 
 const RGBSpectrum &ImagePartition::Texel(int s, int t) const {
