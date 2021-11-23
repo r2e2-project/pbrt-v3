@@ -41,11 +41,15 @@ class PartitionedImage {
     const ImageWrap wrap_mode;
     std::vector<ImagePartition> partitions;
 
+    int x_count{}, y_count{};
+    int w{}, h{};
+
   public:
     PartitionedImage(const Point2i &resolution, const RGBSpectrum *data,
                      const size_t partition_count, const ImageWrap wrap_mode);
 
     RGBSpectrum Lookup(const Point2f &st) const;
+    size_t GetPartitionId(const Point2f &st, bool &is_black) const;
 };
 
 }  // namespace pbrt

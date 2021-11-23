@@ -20,6 +20,12 @@ PartitionedImage::PartitionedImage(const Point2i &resolution,
         throw runtime_error("partition count has to be a power of two");
     }
 
+    const auto iters = static_cast<size_t>(Log2(partition_count));
+    x_count = static_cast<int>(pow(2, (iters + 1) / 2));
+    y_count = static_cast<int>(pow(2, iters / 2));
+    w = resolution.x / x_count;
+    h = resolution.y / y_count;
+
     size_t padding = 25;
 
     for (size_t i = 0; i < partition_count; i++) {
@@ -28,7 +34,8 @@ PartitionedImage::PartitionedImage(const Point2i &resolution,
     }
 }
 
-RGBSpectrum PartitionedImage::Lookup(const Point2f &st) const {
+size_t PartitionedImage::GetPartitionId(const Point2f &st,
+                                        bool &is_black) const {
     Float s = st.x * resolution.x - 0.5f;
     Float t = st.y * resolution.y - 0.5f;
     int s0 = std::floor(s), t0 = std::floor(t);
@@ -45,12 +52,47 @@ RGBSpectrum PartitionedImage::Lookup(const Point2f &st) const {
                              Clamp(t, 0, resolution.y - 1));
 
         case ImageWrap::Black:
+        default:
             if (s < 0 || s >= resolution.x || t < 0 || t >= resolution.y) {
                 is_black = true;
             }
             return make_pair(s, t);
         }
     };
+
+    int s_max, t_max;
+    s_max = t_max = numeric_limits<int>::min();
+
+    bool is_all_black = true;
+    for (int i = 0; i < 2; i++) {
+        for (int j = 0; j < 2; j++) {
+            bool b;
+            auto p = actual_point(s0 + i, t0 + j, b);
+            if (b) continue;
+            s_max = max(s_max, p.first);
+            t_max = max(t_max, p.second);
+            is_all_black = false;
+        }
+    }
+
+    if (is_all_black) {
+        is_black = true;
+        return {};
+    } else {
+        is_black = false;
+    }
+
+    return (s_max / w) + (t_max / h) * x_count;
+}
+
+RGBSpectrum PartitionedImage::Lookup(const Point2f &st) const {
+    bool is_black;
+    auto p_id = GetPartitionId(st, is_black);
+    if (is_black) {
+        return {0.f};
+    }
+
+    return partitions[p_id].Lookup(st);
 }
 
 ImagePartition::ImagePartition(const Point2i &resolution,
@@ -109,6 +151,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
                             resolution.x * Clamp(t, 0, resolution.y - 1)];
 
         case ImageWrap::Black:
+        default:
             if (s < 0 || s >= resolution.x || t < 0 || t >= resolution.y) {
                 return black;
             }
@@ -169,24 +212,9 @@ void ImagePartition::WriteImage(const string &filename) {
 }
 
 const RGBSpectrum &ImagePartition::Texel(int s, int t) const {
-    switch (wrap_mode) {
-    case ImageWrap::Repeat:
-        s = Mod(s, resolution.x);
-        t = Mod(t, resolution.y);
-        break;
-    case ImageWrap::Clamp:
-        s = Clamp(s, 0, resolution.x - 1);
-        t = Clamp(t, 0, resolution.y - 1);
-        break;
-    case ImageWrap::Black: {
-        static const RGBSpectrum black = 0.f;
-        if (s < 0 || s >= resolution.x || t < 0 || t >= resolution.y)
-            return black;
-        break;
-    }
-    }
-
-    return data[s + resolution.x * t];
+    const int i = (s - x0) + padding;
+    const int j = (t - y0) + padding;
+    return data[i + j * W];
 }
 
 RGBSpectrum ImagePartition::Lookup(const Point2f &st) const {
