@@ -48,6 +48,9 @@ class PartitionedImage {
 
     RGBSpectrum Lookup(const Point2f &st) const;
     size_t GetPartitionId(const Point2f &st, bool &is_black) const;
+
+    int Width() const { return w; }
+    int Height() const { return h; }
 };
 
 }  // namespace pbrt
