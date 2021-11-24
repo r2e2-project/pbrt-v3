@@ -11,11 +11,9 @@ namespace pbrt {
 
 class ImagePartition {
   private:
-    const Point2i resolution;
-    const size_t partition_count;
-    const size_t partition_idx;
-    const ImageWrap wrap_mode;
-
+    const Point2i resolution{};
+    const size_t partition_count{};
+    const size_t partition_idx{};
     int padding{};
     int x0{0}, y0{0}, w{0}, h{0};
     int W{0}, H{0};

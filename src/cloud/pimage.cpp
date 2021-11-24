@@ -103,7 +103,6 @@ ImagePartition::ImagePartition(const Point2i &resolution,
     : resolution(resolution),
       partition_count(partition_count),
       partition_idx(partition_idx),
-      wrap_mode(wrap_mode),
       padding(padding) {
     if (not IsPowerOf2(resolution.x) or not IsPowerOf2(resolution.y)) {
         throw runtime_error("image dimensions have to be powers of two");
