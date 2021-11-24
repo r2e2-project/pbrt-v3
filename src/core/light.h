@@ -65,7 +65,8 @@ enum class LightType {
     Infinite,
     Point,
     Projection,
-    Spot
+    Spot,
+    PartitionedInfinite
 };
 
 // Light Declarations
