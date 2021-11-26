@@ -12,6 +12,8 @@ enum class ObjectType {
     Lights,
     AreaLight,
     AreaLights,
+    InfiniteLights,
+    ImagePartition,
     Sampler,
     Camera,
     Scene,

@@ -94,9 +94,12 @@ ParamSet MaterialBlueprint::FilterParamSet(const ParamSet& src) {
 }
 
 static const string TYPE_PREFIXES[] = {
-    "T",       "TM",       "LIGHTS", "AREALIGHT", "AREALIGHTS",
-    "SAMPLER", "CAMERA",   "SCENE",  "MAT",       "FTEX",
-    "STEX",    "MANIFEST", "TEX",    "TINFO",     "STATIC"};
+    "T",         "TM",         "LIGHTS",
+    "AREALIGHT", "AREALIGHTS", "INFINITELIGHTS",
+    "IMGPART",   "SAMPLER",    "CAMERA",
+    "SCENE",     "MAT",        "FTEX",
+    "STEX",      "MANIFEST",   "TEX",
+    "TINFO",     "STATIC"};
 
 static_assert(
     sizeof(TYPE_PREFIXES) / sizeof(string) == to_underlying(ObjectType::COUNT),
@@ -147,6 +150,7 @@ string SceneManager::getFileName(const ObjectType type, const uint32_t id) {
     case ObjectType::Texture:
     case ObjectType::StaticAssignment:
     case ObjectType::AreaLight:
+    case ObjectType::ImagePartition:
         return TYPE_PREFIXES[to_underlying(type)] + to_string(id);
 
     case ObjectType::Sampler:
@@ -156,6 +160,7 @@ string SceneManager::getFileName(const ObjectType type, const uint32_t id) {
     case ObjectType::Scene:
     case ObjectType::Manifest:
     case ObjectType::TreeletInfo:
+    case ObjectType::InfiniteLights:
         return TYPE_PREFIXES[to_underlying(type)];
 
     case ObjectType::TriangleMesh:
