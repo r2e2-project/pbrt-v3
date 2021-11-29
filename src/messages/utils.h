@@ -115,6 +115,12 @@ protobuf::AreaLight to_protobuf(const uint32_t id, const std::string& name,
 
 }  // namespace area_light
 
+namespace infinite_light {
+
+protobuf::InfiniteLight to_protobuf(const ParamSet& params,
+                                    const Transform& light2world);
+}
+
 namespace sampler {
 
 std::shared_ptr<GlobalSampler> from_protobuf(const protobuf::Sampler& sampler,

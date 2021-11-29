@@ -49,6 +49,12 @@ class PartitionedImage {
     RGBSpectrum Lookup(const Point2f &st) const;
     size_t GetPartitionId(const Point2f &st, bool &is_black) const;
 
+    const ImagePartition &GetPartition(const size_t i) const {
+        return partitions.at(i);
+    }
+
+    ImagePartition &GetPartition(const size_t i) { return partitions.at(i); }
+
     int Width() const { return w; }
     int Height() const { return h; }
 };

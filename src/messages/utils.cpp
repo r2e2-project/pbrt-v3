@@ -9,6 +9,7 @@
 #include "cameras/perspective.h"
 #include "cameras/realistic.h"
 #include "cloud/manager.h"
+#include "cloud/pimage.h"
 #include "core/api.h"
 #include "core/api_makefns.h"
 #include "core/stats.h"
@@ -35,6 +36,8 @@
 
 using namespace std;
 using namespace std::chrono;
+
+static auto& _manager = pbrt::global::manager;
 
 namespace pbrt {
 
@@ -223,11 +226,11 @@ protobuf::TextureParams to_protobuf(const TextureParams& texture_params) {
     *params.mutable_material_params() =
         to_protobuf(texture_params.GetMaterialParams());
     for (auto& kv : texture_params.GetFloatTextures()) {
-        int id = global::manager.getId(kv.second.get());
+        int id = _manager.getId(kv.second.get());
         (*params.mutable_float_textures())[kv.first] = id;
     }
     for (auto& kv : texture_params.GetSpectrumTextures()) {
-        int id = global::manager.getId(kv.second.get());
+        int id = _manager.getId(kv.second.get());
         (*params.mutable_spectrum_textures())[kv.first] = id;
     }
     return params;
@@ -444,7 +447,7 @@ TextureParams from_protobuf(
 
     for (auto& kv : texture_params.float_textures()) {
         auto texture_reader =
-            global::manager.GetReader(ObjectType::FloatTexture, kv.second);
+            _manager.GetReader(ObjectType::FloatTexture, kv.second);
         protobuf::FloatTexture texture;
         texture_reader->read(&texture);
         fTex[kv.first] = float_texture::from_protobuf(texture);
@@ -452,7 +455,7 @@ TextureParams from_protobuf(
     for (auto& kv : texture_params.spectrum_textures()) {
         // Load the texture
         auto texture_reader =
-            global::manager.GetReader(ObjectType::SpectrumTexture, kv.second);
+            _manager.GetReader(ObjectType::SpectrumTexture, kv.second);
         protobuf::SpectrumTexture texture;
         texture_reader->read(&texture);
         sTex[kv.first] = spectrum_texture::from_protobuf(texture);
@@ -517,6 +520,101 @@ protobuf::AreaLight area_light::to_protobuf(const uint32_t id,
 
     string serialized_mesh = serdes::triangle_mesh::serialize(*mesh);
     proto_light.set_mesh_data(move(serialized_mesh));
+
+    return proto_light;
+}
+
+protobuf::InfiniteLight infinite_light::to_protobuf(
+    const ParamSet& params, const Transform& light2world) {
+    protobuf::InfiniteLight proto_light;
+
+    // does it have a texmap?
+    string texmap = params.FindOneFilename("mapname", "");
+    if (texmap.empty()) {
+        proto_light.mutable_light()->set_name("infinite");
+        *proto_light.mutable_light()->mutable_paramset() =
+            pbrt::to_protobuf(params);
+        *proto_light.mutable_light()->mutable_light_to_world() =
+            pbrt::to_protobuf(light2world.GetMatrix());
+        return proto_light;
+    }
+
+    if (!HasExtension(texmap, ".png")) {
+        throw runtime_error("only PNG environment maps are supported");
+    }
+
+    protobuf::EnvironmentMap proto_envmap;
+
+    // constexpr size_t MAX_PARTITION_SIZE = 1024 * 1024 * 1025; /* 1 GB */
+    constexpr size_t MAX_PARTITION_SIZE = 8 * 1024 * 1024;      /* 8 MB */
+    constexpr size_t MAX_IMPORTANCE_MAP_SIZE = 1 * 1024 * 1024; /* 1 MB */
+
+    Point2i resolution;
+    auto map = ReadImage(texmap, &resolution);
+
+    size_t partition_count = 1;
+    while (resolution.x * resolution.y * sizeof(RGBSpectrum) / partition_count >
+           MAX_PARTITION_SIZE) {
+        partition_count <<= 1;
+    }
+
+    PartitionedImage partitioned_image{resolution, map.get(), partition_count,
+                                       ImageWrap::Repeat};
+
+    // dumping the image partitions
+    for (size_t i = 0; i < partition_count; i++) {
+        const auto partition_id =
+            _manager.getNextId(ObjectType::ImagePartition);
+        const auto partition_path =
+            _manager.getFilePath(ObjectType::ImagePartition, partition_id);
+
+        if (i == 0) {
+            proto_envmap.set_first_partition_id(partition_id);
+        }
+
+        partitioned_image.GetPartition(i).WriteImage(partition_path + ".png");
+        roost::move_file(partition_path + ".png", partition_path);
+    }
+
+    proto_envmap.set_partition_count(partition_count);
+
+    // taking care of the importance map
+    MIPMap<RGBSpectrum> lmap{resolution, map.get()};
+    int width = resolution.x * 2;
+    int height = resolution.y * 2;
+
+    if (width * height * sizeof(Float) > MAX_IMPORTANCE_MAP_SIZE) {
+        const float f = std::sqrt(1.f * width * height * sizeof(Float) /
+                                  MAX_IMPORTANCE_MAP_SIZE);
+        LOG(INFO) << "Downsampling importance map from (" << width << ", "
+                  << height << ")";
+
+        width = std::ceil(width / f);
+        height = std::ceil(height / f);
+
+        LOG(INFO) << "New size is (" << width << ", " << height << ")";
+    }
+
+    unique_ptr<Float[]> imp_map(new Float[width * height]);
+    const float fwidth = 0.5f / std::min(width, height);
+    ParallelFor(
+        [&](int64_t v) {
+            Float vp = (v + .5f) / (Float)height;
+            Float sinTheta = std::sin(Pi * (v + .5f) / height);
+            for (int u = 0; u < width; ++u) {
+                Float up = (u + .5f) / (Float)width;
+                imp_map[u + v * width] =
+                    lmap.Lookup(Point2f(up, vp), fwidth).y();
+                imp_map[u + v * width] *= sinTheta;
+            }
+        },
+        height, 32);
+
+    proto_envmap.set_importance_map(
+        reinterpret_cast<const char*>(imp_map.get()),
+        width * height * sizeof(Float));
+
+    *proto_light.mutable_environment_map() = proto_envmap;
 
     return proto_light;
 }
@@ -691,7 +789,7 @@ shared_ptr<Material> material::from_protobuf(
         }
 
         protobuf::FloatTexture ftex_proto;
-        auto reader = global::manager.GetReader(ObjectType::FloatTexture, id);
+        auto reader = _manager.GetReader(ObjectType::FloatTexture, id);
         reader->read(&ftex_proto);
         loaded_ftex.emplace(id, float_texture::from_protobuf(ftex_proto));
         ftex.emplace(name, loaded_ftex.at(id));
@@ -708,15 +806,14 @@ shared_ptr<Material> material::from_protobuf(
         }
 
         protobuf::SpectrumTexture stex_proto;
-        auto reader =
-            global::manager.GetReader(ObjectType::SpectrumTexture, id);
+        auto reader = _manager.GetReader(ObjectType::SpectrumTexture, id);
         reader->read(&stex_proto);
         loaded_stex.emplace(id, spectrum_texture::from_protobuf(stex_proto));
         stex.emplace(name, loaded_stex.at(id));
     }
 
     TextureParams tp{geom_params, material_params, ftex, stex};
-    tp.FindString("type", ""); // to avoid unused warning
+    tp.FindString("type", "");  // to avoid unused warning
 
     return pbrt::MakeMaterial(mtl.name(), tp);
 }
@@ -743,7 +840,7 @@ protobuf::Material material::to_protobuf(const std::string& name,
         if (tname.empty()) throw runtime_error("texture not found for " + tex);
 
         shared_ptr<Texture<Float>> ptr = tp.GetFloatTextures().at(tname);
-        auto id = global::manager.getId(ptr.get());
+        auto id = _manager.getId(ptr.get());
         material.mutable_float_textures()->operator[](tname) = id;
 
         ftex_deps.push_back(id);
@@ -755,7 +852,7 @@ protobuf::Material material::to_protobuf(const std::string& name,
         if (tname.empty()) throw runtime_error("texture not found for " + tex);
 
         shared_ptr<Texture<Spectrum>> ptr = tp.GetSpectrumTextures().at(tname);
-        auto id = global::manager.getId(ptr.get());
+        auto id = _manager.getId(ptr.get());
         material.mutable_spectrum_textures()->operator[](tname) = id;
 
         stex_deps.push_back(id);

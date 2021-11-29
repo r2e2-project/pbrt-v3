@@ -150,17 +150,15 @@ message AreaLight {
     bytes mesh_data = 3;
 }
 
-message EnvironmentMap
-{
+message EnvironmentMap {
     uint32 partition_count = 1;
     uint32 first_partition_id = 2;
     bytes importance_map = 3;
 }
 
 message InfiniteLight {
-    uint32 id = 1;
-    Light light = 2;
-    EnvironmentMap environment_map = 3;
+    Light light = 1;
+    EnvironmentMap environment_map = 2;
 }
 
 // Camera, Film & Filter
