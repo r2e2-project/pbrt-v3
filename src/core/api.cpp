@@ -198,6 +198,7 @@ struct RenderOptions {
     // Dumping the scene data
     std::vector<protobuf::Light> protoLights;
     std::vector<protobuf::AreaLight> protoAreaLights;
+    std::vector<protobuf::InfiniteLight> protoInfiniteLights;
 };
 
 // MaterialInstance represents both an instance of a material as well as
@@ -1438,9 +1439,14 @@ void pbrtLightSource(const std::string &name, const ParamSet &params) {
         printf("\n");
     }
 
-    if (PbrtOptions.dumpScene || PbrtOptions.noRender) {
-        renderOptions->protoLights.push_back(
-            light::to_protobuf(name, params, curTransform[0]));
+    if (PbrtOptions.dumpScene) {
+        if (lt->GetType() == LightType::Infinite) {
+            renderOptions->protoInfiniteLights.push_back(
+                infinite_light::to_protobuf(params, curTransform[0]));
+        } else {
+            renderOptions->protoLights.push_back(
+                light::to_protobuf(name, params, curTransform[0]));
+        }
     }
 }
 
@@ -2012,6 +2018,11 @@ Scene *RenderOptions::MakeScene() {
         writer = _manager.GetWriter(ObjectType::AreaLights);
         for (const auto &alight : renderOptions->protoAreaLights) {
             writer->write(alight);
+        }
+
+        writer = _manager.GetWriter(ObjectType::InfiniteLights);
+        for (const auto &ilight : renderOptions->protoInfiniteLights) {
+            writer->write(ilight);
         }
     }
 
