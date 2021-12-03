@@ -26,11 +26,10 @@ PartitionedImage::PartitionedImage(const Point2i &resolution,
     w = resolution.x / x_count;
     h = resolution.y / y_count;
 
-    size_t padding = 25;
-
+    size_t padding = 1;
     for (size_t i = 0; i < partition_count; i++) {
-        partitions.emplace_back(resolution, data, partition_count, i, wrap_mode,
-                                padding);
+        partitions.emplace_back(resolution, data, partition_count, i,
+                                wrap_mode);
     }
 }
 
@@ -99,11 +98,10 @@ ImagePartition::ImagePartition(const Point2i &resolution,
                                const RGBSpectrum *data_ptr,
                                const size_t partition_count,
                                const size_t partition_idx,
-                               const ImageWrap wrap_mode, const int padding)
+                               const ImageWrap wrap_mode)
     : resolution(resolution),
       partition_count(partition_count),
-      partition_idx(partition_idx),
-      padding(padding) {
+      partition_idx(partition_idx) {
     if (not IsPowerOf2(resolution.x) or not IsPowerOf2(resolution.y)) {
         throw runtime_error("image dimensions have to be powers of two");
     }
@@ -203,6 +201,36 @@ ImagePartition::ImagePartition(const Point2i &resolution,
             data[i + W * j] = get_color(s, t);
         }
     }
+}
+
+ImagePartition::ImagePartition(const Point2i &resolution,
+                               const size_t partition_count,
+                               const size_t partition_idx, const int padding,
+                               unique_ptr<RGBSpectrum[]> &&partition_data)
+    : resolution(resolution),
+      partition_count(partition_count),
+      partition_idx(partition_idx),
+      data(move(partition_data)) {
+    if (not IsPowerOf2(resolution.x) or not IsPowerOf2(resolution.y)) {
+        throw runtime_error("image dimensions have to be powers of two");
+    }
+
+    if (not IsPowerOf2(partition_count)) {
+        throw runtime_error("partition count has to be a power of two");
+    }
+
+    const auto iters = static_cast<size_t>(Log2(partition_count));
+    const auto x_count = static_cast<size_t>(pow(2, (iters + 1) / 2));
+    const auto y_count = static_cast<size_t>(pow(2, iters / 2));
+
+    // let's find the coordinates for this partition
+    w = resolution.x / x_count;
+    h = resolution.y / y_count;
+    x0 = (partition_idx % x_count) * w;
+    y0 = (partition_idx / x_count) * h;
+
+    W = w + 2 * padding;
+    H = h + 2 * padding;
 }
 
 void ImagePartition::WriteImage(const string &filename) {

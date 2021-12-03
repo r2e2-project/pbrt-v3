@@ -14,7 +14,7 @@ class ImagePartition {
     const Point2i resolution{};
     const size_t partition_count{};
     const size_t partition_idx{};
-    int padding{};
+    int padding{1};
     int x0{0}, y0{0}, w{0}, h{0};
     int W{0}, H{0};
 
@@ -25,7 +25,11 @@ class ImagePartition {
   public:
     ImagePartition(const Point2i &resolution, const RGBSpectrum *data,
                    const size_t partition_count, const size_t partition_idx,
-                   const ImageWrap wrap_mode, const int padding = 1);
+                   const ImageWrap wrap_mode);
+
+    ImagePartition(const Point2i &resolution, const size_t partition_count,
+                   const size_t partition_idx, const int padding,
+                   std::unique_ptr<RGBSpectrum[]> &&partition_data);
 
     RGBSpectrum Lookup(const Point2f &st) const;
 
