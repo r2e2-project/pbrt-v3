@@ -190,6 +190,7 @@ class TreeletDumpBVH : public BVHAccel {
     std::vector<uint32_t> DumpTreelets(bool root) const;
 
     void DumpMaterials() const;
+    void DumpImagePartitions() const;
 
     std::vector<uint32_t> OrigAssignTreelets(const uint64_t) const;
 

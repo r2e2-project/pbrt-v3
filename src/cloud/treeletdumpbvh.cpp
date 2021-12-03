@@ -2636,6 +2636,8 @@ void TreeletDumpBVH::DumpMaterials() const {
              << t.materials.size() << " materials and " << format_bytes(t.size)
              << " of textures... ";
 
+        writer->write(static_cast<uint32_t>(0));  // number of image partitions
+
         writer->write(static_cast<uint32_t>(texs.size()));
         for (const auto id : texs) {
             writer->write(id);
@@ -2674,6 +2676,83 @@ void TreeletDumpBVH::DumpMaterials() const {
     }
 }
 
+void TreeletDumpBVH::DumpImagePartitions() const {
+    vector<pair<size_t, size_t>> partitions;
+
+    if (_manager.getNextId(ObjectType::ImagePartition) == 0) {
+        // there are no image partitions, bye
+        return;
+    }
+
+    for (size_t i = 0; i < _manager.getNextId(ObjectType::ImagePartition) - 1;
+         i++) {
+        partitions.emplace_back(i, roost::file_size(_manager.getFilePath(
+                                       ObjectType::ImagePartition, i)));
+    }
+
+    struct ImagePartitionTreelet {
+        uint32_t id;
+        vector<uint32_t> partitions{};
+        size_t size{0};
+
+        ImagePartitionTreelet(const uint32_t id) : id(id) {}
+    };
+
+    vector<ImagePartitionTreelet> treelets;
+    treelets.emplace_back(_manager.getNextId(ObjectType::Treelet));
+    sort(partitions.begin(), partitions.end(),
+         [](const auto &a, const auto &b) { return a.second > b.second; });
+
+    for (const auto &p : partitions) {
+        bool allotted = false;
+
+        for (auto &treelet : treelets) {
+            if (treelet.size + p.second <= maxTreeletBytes) {
+                treelet.partitions.push_back(p.first);
+                treelet.size += p.second;
+                allotted = true;
+                break;
+            }
+        }
+
+        if (not allotted) {
+            treelets.emplace_back(_manager.getNextId(ObjectType::Treelet));
+            treelets.back().partitions.push_back(p.first);
+            treelets.back().size += p.second;
+        }
+    }
+
+    for (auto &t : treelets) {
+        auto writer = make_unique<LiteRecordWriter>(
+            _manager.getFilePath(ObjectType::Treelet, t.id));
+
+        cout << "Dumping image-partition treelet " << t.id << " with "
+             << t.partitions.size() << " image(s) totaling "
+             << format_bytes(t.size) << "...";
+
+        writer->write(static_cast<uint32_t>(
+            t.partitions.size()));  // number of image partitions
+
+        for (const uint32_t pid : t.partitions) {
+            writer->write(pid);
+            writer->write(roost::read_file(
+                _manager.getFilePath(ObjectType::ImagePartition, pid)));
+
+            _manager.recordPartitionTreeletId(pid, t.id);
+        }
+
+        writer->write(static_cast<uint32_t>(0));  // ptexs
+        writer->write(static_cast<uint32_t>(0));  // stexs
+        writer->write(static_cast<uint32_t>(0));  // ftexs
+        writer->write(static_cast<uint32_t>(0));  // mats
+        writer->write(static_cast<uint32_t>(0));  // triangle meshes
+        writer->write(static_cast<uint32_t>(0));  // nodes
+        writer->write(static_cast<uint32_t>(0));  // triangles
+
+        cout << "done." << endl;
+    }
+}
+
 vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
     // Assign IDs to each treelet
     for (const TreeletInfo &treelet : allTreelets) {
@@ -2682,6 +2761,7 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
 
     if (root) {
         DumpMaterials();
+        DumpImagePartitions();
     }
 
     vector<unordered_map<uint64_t, uint32_t>> treeletNodeLocations(
@@ -2763,6 +2843,7 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
         auto writer = make_unique<LiteRecordWriter>(
             _manager.getFilePath(ObjectType::Treelet, sTreeletID));
 
+        writer->write(static_cast<uint32_t>(0));  // numImgParts
         writer->write(static_cast<uint32_t>(0));  // numTexs
         writer->write(static_cast<uint32_t>(0));  // numStexs
         writer->write(static_cast<uint32_t>(0));  // numFtexs
