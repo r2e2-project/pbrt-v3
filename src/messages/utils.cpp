@@ -561,6 +561,9 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
     PartitionedImage partitioned_image{resolution, map.get(), partition_count,
                                        ImageWrap::Repeat};
 
+    proto_envmap.set_partition_count(partition_count);
+    *proto_envmap.mutable_resolution() = pbrt::to_protobuf(resolution);
+
     // dumping the image partitions
     for (size_t i = 0; i < partition_count; i++) {
         const auto partition_id =
@@ -575,8 +578,6 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
         partitioned_image.GetPartition(i).WriteImage(partition_path + ".png");
         roost::move_file(partition_path + ".png", partition_path);
     }
-
-    proto_envmap.set_partition_count(partition_count);
 
     // taking care of the importance map
     MIPMap<RGBSpectrum> lmap{resolution, map.get()};
@@ -610,12 +611,13 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
         },
         height, 32);
 
+    proto_envmap.mutable_importance_map_resolution()->set_x(width);
+    proto_envmap.mutable_importance_map_resolution()->set_y(height);
     proto_envmap.set_importance_map(
         reinterpret_cast<const char*>(imp_map.get()),
         width * height * sizeof(Float));
 
     *proto_light.mutable_environment_map() = proto_envmap;
-
     return proto_light;
 }
 

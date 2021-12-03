@@ -2007,6 +2007,13 @@ Scene *RenderOptions::MakeScene() {
     scene_accelerator_val[0] = true;
     allAcceleratorParams.AddBool("sceneaccelerator", std::move(scene_accelerator_val), 1);
 
+    __timepoints.accelerator_creation_start = TimePoints::clock::now();
+    std::shared_ptr<Primitive> accelerator =
+        MakeAccelerator(AcceleratorName, std::move(primitives), allAcceleratorParams);
+    __timepoints.accelerator_creation_end = TimePoints::clock::now();
+
+    if (!accelerator) accelerator = std::make_shared<BVHAccel>(primitives);
+
     /* Do we need to dump the lights? */
     if (PbrtOptions.dumpScene) {
         // let's dump the lights
@@ -2021,17 +2028,18 @@ Scene *RenderOptions::MakeScene() {
         }
 
         writer = _manager.GetWriter(ObjectType::InfiniteLights);
-        for (const auto &ilight : renderOptions->protoInfiniteLights) {
+        for (auto &ilight : renderOptions->protoInfiniteLights) {
+            for (size_t i = 0; i < ilight.environment_map().partition_count();
+                 i++) {
+                ilight.mutable_environment_map()->add_partition_treelets(
+                    _manager.getPartitionTreeletId(
+                        i + ilight.environment_map().first_partition_id()));
+            }
+
             writer->write(ilight);
         }
     }
 
-    __timepoints.accelerator_creation_start = TimePoints::clock::now();
-    std::shared_ptr<Primitive> accelerator =
-        MakeAccelerator(AcceleratorName, std::move(primitives), allAcceleratorParams);
-    __timepoints.accelerator_creation_end = TimePoints::clock::now();
-
-    if (!accelerator) accelerator = std::make_shared<BVHAccel>(primitives);
     Scene *scene = new Scene(accelerator, lights);
     // Erase primitives and lights from _RenderOptions_
     primitives.clear();

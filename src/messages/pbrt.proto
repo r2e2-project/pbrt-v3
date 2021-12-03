@@ -151,9 +151,12 @@ message AreaLight {
 }
 
 message EnvironmentMap {
-    uint32 partition_count = 1;
-    uint32 first_partition_id = 2;
-    bytes importance_map = 3;
+    Point2i resolution = 1;
+    uint32 partition_count = 2;
+    uint32 first_partition_id = 3;
+    repeated uint32 partition_treelets = 4;
+    Point2i importance_map_resolution = 5;
+    bytes importance_map = 6;
 }
 
 message InfiniteLight {
