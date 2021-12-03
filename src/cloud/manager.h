@@ -120,9 +120,17 @@ class SceneManager {
         materialToTreelet[mtlId] = tid;
     }
 
-    uint32_t getMaterialTreeletId(const uint32_t mtlId) {
+    uint32_t getMaterialTreeletId(const uint32_t mtlId) const {
         if (not mtlId) return 0;
         return materialToTreelet.at(mtlId);
+    }
+
+    void recordPartitionTreeletId(const uint32_t pid, const uint32_t tid) {
+        partitionToTreelet[pid] = tid;
+    }
+
+    uint32_t getPartitionTreeletId(const uint32_t pid) const {
+        return partitionToTreelet.at(pid);
     }
 
     void recordMeshAreaLightId(const TriangleMesh* tm, const uint32_t light) {
@@ -186,6 +194,7 @@ class SceneManager {
              std::map<uint32_t, std::shared_ptr<std::map<uint32_t, uint32_t>>>>
         compoundMaterials;  // origMtl -> {newMtl -> {oldFace -> newFace}}
 
+    std::map<uint32_t, uint32_t> partitionToTreelet;
     std::map<uint32_t, uint32_t> materialToTreelet;
 
     std::map<ObjectID, std::set<ObjectKey>> treeletDependencies;
