@@ -600,6 +600,14 @@ SET_TARGET_PROPERTIES ( pbrt_genrays PROPERTIES OUTPUT_NAME "pbrt-genrays" )
 TARGET_COMPILE_FEATURES ( pbrt_genrays PRIVATE ${PBRT_CXX11_FEATURES} )
 TARGET_LINK_LIBRARIES ( pbrt_genrays ${ALL_PBRT_LIBS} )
 
+# pimage_test
+ADD_EXECUTABLE ( pimage_test src/cloud/pimage_test.cpp )
+ADD_SANITIZERS ( pimage_test )
+
+SET_TARGET_PROPERTIES ( pimage_test PROPERTIES OUTPUT_NAME "pimage_test" )
+TARGET_COMPILE_FEATURES ( pimage_test PRIVATE ${PBRT_CXX11_FEATURES} )
+TARGET_LINK_LIBRARIES ( pimage_test ${ALL_PBRT_LIBS} )
+
 # pbrt-treelet-info
 ADD_EXECUTABLE ( pbrt_treelet_info src/cloud/treelet-info.cpp )
 ADD_SANITIZERS ( pbrt_treelet_info )
