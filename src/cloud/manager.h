@@ -163,6 +163,18 @@ class SceneManager {
 
     bool hasInMemoryTextures() const { return not inMemoryTextures.empty(); }
 
+    void addInMemoryImagePartition(const uint32_t pid,
+                                   std::shared_ptr<RGBSpectrum>&& data,
+                                   const size_t length) {
+        inMemoryImagePartitions.emplace(pid,
+                                        make_pair(std::move(data), length));
+    }
+
+    std::pair<std::shared_ptr<RGBSpectrum>, size_t> getInMemoryImagePartition(
+        const uint32_t pid) {
+        return inMemoryImagePartitions.at(pid);
+    }
+
   private:
     void loadManifest();
     void loadTreeletDependencies();
@@ -179,6 +191,9 @@ class SceneManager {
 
     std::map<std::string, std::pair<std::shared_ptr<char>, size_t>>
         inMemoryTextures;
+
+    std::map<uint32_t, std::pair<std::shared_ptr<RGBSpectrum>, size_t>>
+        inMemoryImagePartitions;
 
     // Dumping treelets
     std::map<const TriangleMesh*, uint32_t> tmMaterialIds;
