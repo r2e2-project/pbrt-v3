@@ -32,8 +32,7 @@ class ImagePartition {
                    std::unique_ptr<RGBSpectrum[]> &&partition_data);
 
     RGBSpectrum Lookup(const Point2f &st) const;
-
-    void WriteImage(const std::string &filename);
+    void WriteImage(const std::string &filename) const;
 };
 
 class PartitionedImage {

@@ -233,7 +233,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
     H = h + 2 * padding;
 }
 
-void ImagePartition::WriteImage(const string &filename) {
+void ImagePartition::WriteImage(const string &filename) const {
     pbrt::WriteImage(filename, (Float *)data.get(),
                      {Point2i(0, 0), Point2i(W, H)}, Point2i(W, H));
 }
