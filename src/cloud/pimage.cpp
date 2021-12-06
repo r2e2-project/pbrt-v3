@@ -145,8 +145,8 @@ ImagePartition::ImagePartition(const Point2i &resolution,
     W = w + 2 * padding;
     H = h + 2 * padding;
 
-    data = make_shared<RGBSpectrum>(new RGBSpectrum[W * H],
-                                    default_delete<RGBSpectrum[]>());
+    data = shared_ptr<RGBSpectrum>(new RGBSpectrum[W * H],
+                                   default_delete<RGBSpectrum[]>());
 
     // copy the main pixels
     for (int i = 0; i < w; i++) {

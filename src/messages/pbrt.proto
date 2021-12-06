@@ -162,6 +162,7 @@ message EnvironmentMap {
 message InfiniteLight {
     Light light = 1;
     EnvironmentMap environment_map = 2;
+    RGBSpectrum power = 3;
 }
 
 // Camera, Film & Filter

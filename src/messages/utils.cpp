@@ -531,12 +531,7 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
     // does it have a texmap?
     string texmap = params.FindOneFilename("mapname", "");
     if (texmap.empty()) {
-        proto_light.mutable_light()->set_name("infinite");
-        *proto_light.mutable_light()->mutable_paramset() =
-            pbrt::to_protobuf(params);
-        *proto_light.mutable_light()->mutable_light_to_world() =
-            pbrt::to_protobuf(light2world.GetMatrix());
-        return proto_light;
+        throw runtime_error("only for infinite lights with envrionment maps");
     }
 
     if (!HasExtension(texmap, ".png")) {
@@ -618,6 +613,9 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
         width * height * sizeof(Float));
 
     *proto_light.mutable_environment_map() = proto_envmap;
+    *proto_light.mutable_power() = to_protobuf(Spectrum(
+        lmap.Lookup(Point2f(.5f, .5f), .5f), SpectrumType::Illuminant));
+
     return proto_light;
 }
 
