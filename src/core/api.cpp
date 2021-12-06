@@ -122,6 +122,8 @@
 #include "cloud/treeletdumpbvh.h"
 #include "accelerators/proxydumpbvh.h"
 #include "cloud/manager.h"
+#include "cloud/pimage.h"
+#include "lights/pinfinite.h"
 
 #include <map>
 #include <stdio.h>
@@ -2037,6 +2039,40 @@ Scene *RenderOptions::MakeScene() {
             }
 
             writer->write(ilight);
+        }
+    } else if (PbrtOptions.loadScene) {
+        // loading infinite lights
+        auto reader = _manager.GetReader(ObjectType::InfiniteLights);
+        while (!reader->eof()) {
+            protobuf::InfiniteLight proto;
+            reader->read(&proto);
+
+            const auto resolution =
+                from_protobuf(proto.environment_map().resolution());
+            const auto partitionCount =
+                proto.environment_map().partition_count();
+            const auto baseId = proto.environment_map().first_partition_id();
+
+            std::vector<ImagePartition> imagePartitions;
+            for (size_t i = 0;
+                 i < proto.environment_map().partition_count(); i++) {
+                imagePartitions.emplace_back(
+                    resolution, partitionCount, i, 1,
+                    _manager.getInMemoryImagePartition(baseId + i).first);
+            }
+
+            PartitionedImage pImage{resolution, move(imagePartitions),
+                                    ImageWrap::Repeat};
+
+            auto pLight = std::make_shared<PartitionedInfiniteAreaLight>(
+                from_protobuf(proto.light().light_to_world()),
+                from_protobuf(proto.power()), 1, std::move(pImage),
+                reinterpret_cast<const Float *>(
+                    proto.environment_map().importance_map().data()),
+                proto.environment_map().importance_map_resolution().x(),
+                proto.environment_map().importance_map_resolution().y());
+
+            lights.emplace_back(std::move(pLight));
         }
     }
 
