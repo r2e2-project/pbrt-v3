@@ -33,6 +33,28 @@ PartitionedImage::PartitionedImage(const Point2i &resolution,
     }
 }
 
+PartitionedImage::PartitionedImage(const Point2i &resolution,
+                                   vector<ImagePartition> &&partitions,
+                                   const ImageWrap wrap_mode)
+    : resolution(resolution),
+      partition_count(partitions.size()),
+      wrap_mode(wrap_mode),
+      partitions(move(partitions)) {
+    if (not IsPowerOf2(resolution.x) or not IsPowerOf2(resolution.y)) {
+        throw runtime_error("image dimensions have to be powers of two");
+    }
+
+    if (not IsPowerOf2(partition_count)) {
+        throw runtime_error("partition count has to be a power of two");
+    }
+
+    const auto iters = static_cast<size_t>(Log2(partition_count));
+    x_count = static_cast<int>(pow(2, (iters + 1) / 2));
+    y_count = static_cast<int>(pow(2, iters / 2));
+    w = resolution.x / x_count;
+    h = resolution.y / y_count;
+}
+
 size_t PartitionedImage::GetPartitionId(const Point2f &st,
                                         bool &is_black) const {
     Float s = st.x * resolution.x - 0.5f;
@@ -123,14 +145,15 @@ ImagePartition::ImagePartition(const Point2i &resolution,
     W = w + 2 * padding;
     H = h + 2 * padding;
 
-    data = make_unique<RGBSpectrum[]>(W * H);
+    data = make_shared<RGBSpectrum>(new RGBSpectrum[W * H],
+                                    default_delete<RGBSpectrum[]>());
 
     // copy the main pixels
     for (int i = 0; i < w; i++) {
         for (int j = 0; j < h; j++) {
             const auto s = x0 + i;
             const auto t = y0 + j;
-            data[(i + padding) + (j + padding) * W] =
+            data.get()[(i + padding) + (j + padding) * W] =
                 data_ptr[s + resolution.x * t];
         }
     }
@@ -165,7 +188,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
             const int t = y0 + y;
             const int i = padding + w + x_pad;
             const int j = padding + y;
-            data[i + W * j] = get_color(s, t);
+            data.get()[i + W * j] = get_color(s, t);
         }
     }
 
@@ -176,7 +199,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
             const int t = y0 + y;
             const int i = padding - x_pad - 1;
             const int j = padding + y;
-            data[i + W * j] = get_color(s, t);
+            data.get()[i + W * j] = get_color(s, t);
         }
     }
 
@@ -187,7 +210,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
             const int t = y0 - y_pad - 1;
             const int i = padding + x;
             const int j = padding - y_pad - 1;
-            data[i + W * j] = get_color(s, t);
+            data.get()[i + W * j] = get_color(s, t);
         }
     }
 
@@ -198,7 +221,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
             const int t = y0 + h + y_pad;
             const int i = padding + x;
             const int j = padding + h + y_pad;
-            data[i + W * j] = get_color(s, t);
+            data.get()[i + W * j] = get_color(s, t);
         }
     }
 }
@@ -206,7 +229,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
 ImagePartition::ImagePartition(const Point2i &resolution,
                                const size_t partition_count,
                                const size_t partition_idx, const int padding,
-                               unique_ptr<RGBSpectrum[]> &&partition_data)
+                               shared_ptr<RGBSpectrum> &&partition_data)
     : resolution(resolution),
       partition_count(partition_count),
       partition_idx(partition_idx),
@@ -241,7 +264,7 @@ void ImagePartition::WriteImage(const string &filename) const {
 const RGBSpectrum &ImagePartition::Texel(int s, int t) const {
     const int i = (s - x0) + padding;
     const int j = (t - y0) + padding;
-    return data[i + j * W];
+    return data.get()[i + j * W];
 }
 
 RGBSpectrum ImagePartition::Lookup(const Point2f &st) const {
