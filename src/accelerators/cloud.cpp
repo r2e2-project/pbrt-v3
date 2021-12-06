@@ -10,6 +10,7 @@
 #include "core/parallel.h"
 #include "core/paramset.h"
 #include "core/primitive.h"
+#include "imageio.h"
 #include "lights/diffuse.h"
 #include "materials/matte.h"
 #include "messages/compressed.h"
@@ -275,6 +276,26 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     }
 
     /* read in the textures & materials included in this treelet */
+
+    // IMAGE PARTITIONS
+    const auto included_image_partitions = reader->read<uint32_t>();
+    for (size_t i = 0; i < included_image_partitions; i++) {
+        const uint32_t id = reader->read<uint32_t>();
+        const size_t len = reader->next_record_size();
+
+        vector<char> compressed_image;
+        compressed_image.resize(len);
+        reader->read(compressed_image.data(), len);
+
+        Point2i resolution;
+        auto *data = ReadImagePNGFromMemory(
+            reinterpret_cast<const unsigned char *>(compressed_image.data()),
+            compressed_image.size(), &resolution);
+
+        shared_ptr<RGBSpectrum> image{data, default_delete<RGBSpectrum[]>()};
+        _manager.addInMemoryImagePartition(id, move(image),
+                                           resolution.x * resolution.y);
+    }
 
     // PTEX TEXTURES
     const auto included_texture_count = reader->read<uint32_t>();
