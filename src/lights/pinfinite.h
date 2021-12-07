@@ -79,6 +79,7 @@ class PartitionedInfiniteAreaLight : public Light {
   private:
     // PartitionedInfiniteAreaLight Private Data
     PartitionedImage Lmap;
+    Spectrum L;
     Spectrum power;
     Point3f worldCenter;
     Float worldRadius;

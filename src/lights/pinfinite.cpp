@@ -42,12 +42,13 @@ namespace pbrt {
 
 // PartitionedInfiniteAreaLight Method Definitions
 PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
-    const Transform &LightToWorld, const Spectrum &L, int nSamples,
+    const Transform &LightToWorld, const Spectrum &power, int nSamples,
     PartitionedImage &&Lmap, const Float *distImg, const int distImgWidth,
     const int distImgHeight)
     : Light((int)LightFlags::Infinite, LightToWorld, MediumInterface(),
             nSamples),
       Lmap(std::move(Lmap)),
+      L(1.f),
       power(power),
       distribution(std::make_unique<Distribution2D>(distImg, distImgWidth,
                                                     distImgHeight)) {
@@ -61,13 +62,13 @@ PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
 }
 
 Spectrum PartitionedInfiniteAreaLight::Power() const {
-    return Pi * worldRadius * worldRadius * power;
+    return Pi * worldRadius * worldRadius * power * L;
 }
 
 Spectrum PartitionedInfiniteAreaLight::Le(const RayDifferential &ray) const {
     Vector3f w = Normalize(WorldToLight(ray.d));
     Point2f st(SphericalPhi(w) * Inv2Pi, SphericalTheta(w) * InvPi);
-    return Spectrum(Lmap.Lookup(st), SpectrumType::Illuminant);
+    return Spectrum(Lmap.Lookup(st) * L, SpectrumType::Illuminant);
 }
 
 Spectrum PartitionedInfiniteAreaLight::Sample_Li(const Interaction &ref,
@@ -94,7 +95,7 @@ Spectrum PartitionedInfiniteAreaLight::Sample_Li(const Interaction &ref,
     // Return radiance value for infinite light direction
     *vis = VisibilityTester(ref, Interaction(ref.p + *wi * (2 * worldRadius),
                                              ref.time, mediumInterface));
-    return Spectrum(Lmap.Lookup(uv), SpectrumType::Illuminant);
+    return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
 }
 
 Float PartitionedInfiniteAreaLight::Pdf_Li(const Interaction &,
@@ -138,7 +139,7 @@ Spectrum PartitionedInfiniteAreaLight::Sample_Le(const Point2f &u1,
     // Compute _PartitionedInfiniteAreaLight_ ray PDFs
     *pdfDir = sinTheta == 0 ? 0 : mapPdf / (2 * Pi * Pi * sinTheta);
     *pdfPos = 1 / (Pi * worldRadius * worldRadius);
-    return Spectrum(Lmap.Lookup(uv), SpectrumType::Illuminant);
+    return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
 }
 
 void PartitionedInfiniteAreaLight::Pdf_Le(const Ray &ray, const Normal3f &,
