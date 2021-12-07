@@ -2679,13 +2679,14 @@ void TreeletDumpBVH::DumpMaterials() const {
 void TreeletDumpBVH::DumpImagePartitions() const {
     vector<pair<size_t, size_t>> partitions;
 
-    if (_manager.getNextId(ObjectType::ImagePartition) == 0) {
+    const auto partition_count = _manager.getNextId(ObjectType::ImagePartition);
+
+    if (partition_count == 0) {
         // there are no image partitions, bye
         return;
     }
 
-    for (size_t i = 0; i < _manager.getNextId(ObjectType::ImagePartition) - 1;
-         i++) {
+    for (size_t i = 0; i < partition_count; i++) {
         partitions.emplace_back(i, roost::file_size(_manager.getFilePath(
                                        ObjectType::ImagePartition, i)));
     }
@@ -2730,8 +2731,8 @@ void TreeletDumpBVH::DumpImagePartitions() const {
              << t.partitions.size() << " image(s) totaling "
              << format_bytes(t.size) << "...";
 
-        writer->write(static_cast<uint32_t>(
-            t.partitions.size()));  // number of image partitions
+        writer->write(
+            static_cast<uint32_t>(t.partitions.size()));  // image partitions
 
         for (const uint32_t pid : t.partitions) {
             writer->write(pid);
@@ -2967,7 +2968,7 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
             }
         }
 
-        writer->write_at(sizeof(uint32_t) * 4 * 2, numTriMeshes);
+        writer->write_at(sizeof(uint32_t) * 5 * 2, numTriMeshes);
 
         // Write out nodes for treelet
         /* format:

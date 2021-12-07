@@ -281,11 +281,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     const auto included_image_partitions = reader->read<uint32_t>();
     for (size_t i = 0; i < included_image_partitions; i++) {
         const uint32_t id = reader->read<uint32_t>();
-        const size_t len = reader->next_record_size();
-
-        vector<char> compressed_image;
-        compressed_image.resize(len);
-        reader->read(compressed_image.data(), len);
+        const string compressed_image = reader->read<string>();
 
         Point2i resolution;
         auto *data = ReadImagePNGFromMemory(
