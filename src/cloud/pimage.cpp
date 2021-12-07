@@ -229,7 +229,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
 ImagePartition::ImagePartition(const Point2i &resolution,
                                const size_t partition_count,
                                const size_t partition_idx, const int padding,
-                               shared_ptr<RGBSpectrum> &&partition_data)
+                               const shared_ptr<RGBSpectrum> &partition_data)
     : resolution(resolution),
       partition_count(partition_count),
       partition_idx(partition_idx),

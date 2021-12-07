@@ -48,6 +48,7 @@ PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
     : Light((int)LightFlags::Infinite, LightToWorld, MediumInterface(),
             nSamples),
       Lmap(std::move(Lmap)),
+      power(power),
       distribution(std::make_unique<Distribution2D>(distImg, distImgWidth,
                                                     distImgHeight)) {
     // TODO:
@@ -60,8 +61,7 @@ PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
 }
 
 Spectrum PartitionedInfiniteAreaLight::Power() const {
-    return Pi * worldRadius * worldRadius *
-           Spectrum(Lmap.Lookup(Point2f(.5f, .5f)), SpectrumType::Illuminant);
+    return Pi * worldRadius * worldRadius * power;
 }
 
 Spectrum PartitionedInfiniteAreaLight::Le(const RayDifferential &ray) const {

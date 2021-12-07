@@ -528,6 +528,10 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
     const ParamSet& params, const Transform& light2world) {
     protobuf::InfiniteLight proto_light;
 
+    *proto_light.mutable_light()->mutable_light_to_world() =
+        to_protobuf(light2world.GetMatrix());
+    *proto_light.mutable_light()->mutable_paramset() = to_protobuf(params);
+
     // does it have a texmap?
     string texmap = params.FindOneFilename("mapname", "");
     if (texmap.empty()) {

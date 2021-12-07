@@ -2054,8 +2054,7 @@ Scene *RenderOptions::MakeScene() {
             const auto baseId = proto.environment_map().first_partition_id();
 
             std::vector<ImagePartition> imagePartitions;
-            for (size_t i = 0;
-                 i < proto.environment_map().partition_count(); i++) {
+            for (size_t i = 0; i < partitionCount; i++) {
                 imagePartitions.emplace_back(
                     resolution, partitionCount, i, 1,
                     _manager.getInMemoryImagePartition(baseId + i).first);

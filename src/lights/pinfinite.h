@@ -79,6 +79,7 @@ class PartitionedInfiniteAreaLight : public Light {
   private:
     // PartitionedInfiniteAreaLight Private Data
     PartitionedImage Lmap;
+    Spectrum power;
     Point3f worldCenter;
     Float worldRadius;
     std::unique_ptr<Distribution2D> distribution;

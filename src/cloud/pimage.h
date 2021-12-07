@@ -29,7 +29,7 @@ class ImagePartition {
 
     ImagePartition(const Point2i &resolution, const size_t partition_count,
                    const size_t partition_idx, const int padding,
-                   std::shared_ptr<RGBSpectrum> &&partition_data);
+                   const std::shared_ptr<RGBSpectrum>& partition_data);
 
     RGBSpectrum Lookup(const Point2f &st) const;
     void WriteImage(const std::string &filename) const;
