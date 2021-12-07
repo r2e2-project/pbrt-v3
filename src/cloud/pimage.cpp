@@ -1,5 +1,7 @@
 #include "pimage.h"
 
+#include <fstream>
+
 #include "imageio.h"
 
 using namespace std;
@@ -257,8 +259,9 @@ ImagePartition::ImagePartition(const Point2i &resolution,
 }
 
 void ImagePartition::WriteImage(const string &filename) const {
-    pbrt::WriteImage(filename, (Float *)data.get(),
-                     {Point2i(0, 0), Point2i(W, H)}, Point2i(W, H));
+    ofstream fout{filename, ios::trunc | ios::binary};
+    fout.write(reinterpret_cast<const char *>(data.get()),
+               W * H * sizeof(RGBSpectrum));
 }
 
 const RGBSpectrum &ImagePartition::Texel(int s, int t) const {

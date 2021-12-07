@@ -574,8 +574,7 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
             proto_envmap.set_first_partition_id(partition_id);
         }
 
-        partitioned_image.GetPartition(i).WriteImage(partition_path + ".png");
-        roost::move_file(partition_path + ".png", partition_path);
+        partitioned_image.GetPartition(i).WriteImage(partition_path);
     }
 
     // taking care of the importance map

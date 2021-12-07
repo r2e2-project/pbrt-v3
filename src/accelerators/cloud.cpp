@@ -281,16 +281,13 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     const auto included_image_partitions = reader->read<uint32_t>();
     for (size_t i = 0; i < included_image_partitions; i++) {
         const uint32_t id = reader->read<uint32_t>();
-        const string compressed_image = reader->read<string>();
+        const size_t len = reader->next_record_size();
+        const size_t pixel_count = len / sizeof(RGBSpectrum);
+        shared_ptr<RGBSpectrum> image{new RGBSpectrum[pixel_count],
+                                      default_delete<RGBSpectrum[]>()};
 
-        Point2i resolution;
-        auto *data = ReadImagePNGFromMemory(
-            reinterpret_cast<const unsigned char *>(compressed_image.data()),
-            compressed_image.size(), &resolution);
-
-        shared_ptr<RGBSpectrum> image{data, default_delete<RGBSpectrum[]>()};
-        _manager.addInMemoryImagePartition(id, move(image),
-                                           resolution.x * resolution.y);
+        reader->read(reinterpret_cast<char *>(image.get()), len);
+        _manager.addInMemoryImagePartition(id, move(image), pixel_count);
     }
 
     // PTEX TEXTURES
