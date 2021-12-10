@@ -43,14 +43,67 @@
 #include "light.h"
 #include "mipmap.h"
 #include "pbrt.h"
+#include "sampling.h"
 #include "scene.h"
 #include "shape.h"
 #include "texture.h"
 
 namespace pbrt {
 
+class CloudInfiniteAreaLight : public Light {
+  public:
+    CloudInfiniteAreaLight(const Transform &LightToWorld, const Spectrum &power,
+                           int nSamples, const Float *distImg,
+                           const int distImgWidth, const int distImgHeight);
+
+    void Preprocess(const Scene &scene) {
+        scene.WorldBound().BoundingSphere(&worldCenter, &worldRadius);
+    }
+
+    Spectrum Power() const;
+    Spectrum Le(const RayDifferential &ray) const {
+        throw std::runtime_error("must not be called");
+    }
+
+    Spectrum Sample_Li(const Interaction &ref, const Point2f &u, Vector3f *wi,
+                       Float *pdf, VisibilityTester *vis) const {
+        throw std::runtime_error("must not be called");
+    }
+
+    Spectrum Sample_Le(const Point2f &u1, const Point2f &u2, Float time,
+                       Ray *ray, Normal3f *nLight, Float *pdfPos,
+                       Float *pdfDir) const {
+        throw std::runtime_error("must not be called");
+    }
+
+    Float Pdf_Li(const Interaction &, const Vector3f &) const;
+    void Pdf_Le(const Ray &, const Normal3f &, Float *pdfPos,
+                Float *pdfDir) const;
+
+    Point2f Le_SampledPoint(const RayDifferential &ray) const;
+    Point2f Sample_Li_SampledPoint(const Interaction &ref, const Point2f &u,
+                                   Vector3f *wi, Float *pdf,
+                                   VisibilityTester *vis, const Point2f &uv,
+                                   const Float mapPdf) const;
+    Point2f Sample_Le_SampledPoint(const Point2f &u1, const Point2f &u2,
+                                   Float time, Ray *ray, Normal3f *nLight,
+                                   Float *pdfPos, Float *pdfDir,
+                                   const Point2f &uv, const Float mapPdf) const;
+
+    LightType GetType() const { return LightType::PartitionedInfinite; }
+
+  protected:
+    Spectrum L;
+    std::unique_ptr<Distribution2D> distribution;
+
+  private:
+    Spectrum power;
+    Point3f worldCenter;
+    Float worldRadius;
+};
+
 // InfiniteAreaLight Declarations
-class PartitionedInfiniteAreaLight : public Light {
+class PartitionedInfiniteAreaLight : public CloudInfiniteAreaLight {
   public:
     // InfiniteAreaLight Public Methods
     PartitionedInfiniteAreaLight(const Transform &LightToWorld,
@@ -59,31 +112,37 @@ class PartitionedInfiniteAreaLight : public Light {
                                  const int distImgWidth,
                                  const int distImgHeight);
 
-    void Preprocess(const Scene &scene) {
-        scene.WorldBound().BoundingSphere(&worldCenter, &worldRadius);
+    Spectrum Le(const RayDifferential &ray) const {
+        const auto uv = Le_SampledPoint(ray);
+        return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
     }
 
-    Spectrum Power() const;
-    Spectrum Le(const RayDifferential &ray) const;
     Spectrum Sample_Li(const Interaction &ref, const Point2f &u, Vector3f *wi,
-                       Float *pdf, VisibilityTester *vis) const;
-    Float Pdf_Li(const Interaction &, const Vector3f &) const;
+                       Float *pdf, VisibilityTester *vis) const {
+        Float mapPdf;
+        Point2f uv = distribution->SampleContinuous(u, &mapPdf);
+        if (mapPdf == 0) return Spectrum(0.f);
+
+        const auto p = Sample_Li_SampledPoint(ref, u, wi, pdf, vis, uv, mapPdf);
+        return Spectrum(Lmap.Lookup(p) * L, SpectrumType::Illuminant);
+    }
+
     Spectrum Sample_Le(const Point2f &u1, const Point2f &u2, Float time,
                        Ray *ray, Normal3f *nLight, Float *pdfPos,
-                       Float *pdfDir) const;
-    void Pdf_Le(const Ray &, const Normal3f &, Float *pdfPos,
-                Float *pdfDir) const;
+                       Float *pdfDir) const {
+        Float mapPdf;
+        Point2f uv = distribution->SampleContinuous(u1, &mapPdf);
+        if (mapPdf == 0) return Spectrum(0.f);
 
-    LightType GetType() const { return LightType::PartitionedInfinite; }
+        const auto p = Sample_Le_SampledPoint(u1, u2, time, ray, nLight, pdfPos,
+                                              pdfDir, uv, mapPdf);
+
+        return Spectrum(Lmap.Lookup(p) * L, SpectrumType::Illuminant);
+    }
 
   private:
     // PartitionedInfiniteAreaLight Private Data
     PartitionedImage Lmap;
-    Spectrum L;
-    Spectrum power;
-    Point3f worldCenter;
-    Float worldRadius;
-    std::unique_ptr<Distribution2D> distribution;
 };
 
 std::shared_ptr<PartitionedInfiniteAreaLight> CreatePartitionedInfiniteLight(

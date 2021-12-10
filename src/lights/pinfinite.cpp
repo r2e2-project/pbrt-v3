@@ -41,45 +41,32 @@
 namespace pbrt {
 
 // PartitionedInfiniteAreaLight Method Definitions
-PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
+CloudInfiniteAreaLight::CloudInfiniteAreaLight(
     const Transform &LightToWorld, const Spectrum &power, int nSamples,
-    PartitionedImage &&Lmap, const Float *distImg, const int distImgWidth,
-    const int distImgHeight)
+    const Float *distImg, const int distImgWidth, const int distImgHeight)
     : Light((int)LightFlags::Infinite, LightToWorld, MediumInterface(),
             nSamples),
-      Lmap(std::move(Lmap)),
       L(1.f),
       power(power),
       distribution(std::make_unique<Distribution2D>(distImg, distImgWidth,
-                                                    distImgHeight)) {
-    // TODO:
-    // if (texmap != "") {
-    //     texels = ReadImage(texmap, &resolution);
-    //     if (texels)
-    //         for (int i = 0; i < resolution.x * resolution.y; ++i)
-    //             texels[i] *= L.ToRGBSpectrum();
-    // }
-}
+                                                    distImgHeight)) {}
 
-Spectrum PartitionedInfiniteAreaLight::Power() const {
+Spectrum CloudInfiniteAreaLight::Power() const {
     return Pi * worldRadius * worldRadius * power * L;
 }
 
-Spectrum PartitionedInfiniteAreaLight::Le(const RayDifferential &ray) const {
+Point2f CloudInfiniteAreaLight::Le_SampledPoint(
+    const RayDifferential &ray) const {
     Vector3f w = Normalize(WorldToLight(ray.d));
     Point2f st(SphericalPhi(w) * Inv2Pi, SphericalTheta(w) * InvPi);
-    return Spectrum(Lmap.Lookup(st) * L, SpectrumType::Illuminant);
+    return st;
+    // return Spectrum(Lmap.Lookup(st) * L, SpectrumType::Illuminant);
 }
 
-Spectrum PartitionedInfiniteAreaLight::Sample_Li(const Interaction &ref,
-                                                 const Point2f &u, Vector3f *wi,
-                                                 Float *pdf,
-                                                 VisibilityTester *vis) const {
+Point2f CloudInfiniteAreaLight::Sample_Li_SampledPoint(
+    const Interaction &ref, const Point2f &u, Vector3f *wi, Float *pdf,
+    VisibilityTester *vis, const Point2f &uv, const Float mapPdf) const {
     ProfilePhase _(Prof::LightSample);
-    // Find $(u,v)$ sample coordinates in infinite light texture
-    Float mapPdf;
-    Point2f uv = distribution->SampleContinuous(u, &mapPdf);
-    if (mapPdf == 0) return Spectrum(0.f);
 
     // Convert infinite light sample point to direction
     Float theta = uv[1] * Pi, phi = uv[0] * 2 * Pi;
@@ -95,11 +82,12 @@ Spectrum PartitionedInfiniteAreaLight::Sample_Li(const Interaction &ref,
     // Return radiance value for infinite light direction
     *vis = VisibilityTester(ref, Interaction(ref.p + *wi * (2 * worldRadius),
                                              ref.time, mediumInterface));
-    return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
+    return uv;
+    // return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
 }
 
-Float PartitionedInfiniteAreaLight::Pdf_Li(const Interaction &,
-                                           const Vector3f &w) const {
+Float CloudInfiniteAreaLight::Pdf_Li(const Interaction &,
+                                     const Vector3f &w) const {
     ProfilePhase _(Prof::LightPdf);
     Vector3f wi = WorldToLight(w);
     Float theta = SphericalTheta(wi), phi = SphericalPhi(wi);
@@ -109,19 +97,12 @@ Float PartitionedInfiniteAreaLight::Pdf_Li(const Interaction &,
            (2 * Pi * Pi * sinTheta);
 }
 
-Spectrum PartitionedInfiniteAreaLight::Sample_Le(const Point2f &u1,
-                                                 const Point2f &u2, Float time,
-                                                 Ray *ray, Normal3f *nLight,
-                                                 Float *pdfPos,
-                                                 Float *pdfDir) const {
+Point2f CloudInfiniteAreaLight::Sample_Le_SampledPoint(
+    const Point2f &u1, const Point2f &u2, Float time, Ray *ray,
+    Normal3f *nLight, Float *pdfPos, Float *pdfDir, const Point2f &uv,
+    const Float mapPdf) const {
     ProfilePhase _(Prof::LightSample);
-    // Compute direction for infinite light sample ray
-    Point2f u = u1;
 
-    // Find $(u,v)$ sample coordinates in infinite light texture
-    Float mapPdf;
-    Point2f uv = distribution->SampleContinuous(u, &mapPdf);
-    if (mapPdf == 0) return Spectrum(0.f);
     Float theta = uv[1] * Pi, phi = uv[0] * 2.f * Pi;
     Float cosTheta = std::cos(theta), sinTheta = std::sin(theta);
     Float sinPhi = std::sin(phi), cosPhi = std::cos(phi);
@@ -139,11 +120,13 @@ Spectrum PartitionedInfiniteAreaLight::Sample_Le(const Point2f &u1,
     // Compute _PartitionedInfiniteAreaLight_ ray PDFs
     *pdfDir = sinTheta == 0 ? 0 : mapPdf / (2 * Pi * Pi * sinTheta);
     *pdfPos = 1 / (Pi * worldRadius * worldRadius);
-    return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
+
+    return uv;
+    // return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
 }
 
-void PartitionedInfiniteAreaLight::Pdf_Le(const Ray &ray, const Normal3f &,
-                                          Float *pdfPos, Float *pdfDir) const {
+void CloudInfiniteAreaLight::Pdf_Le(const Ray &ray, const Normal3f &,
+                                    Float *pdfPos, Float *pdfDir) const {
     ProfilePhase _(Prof::LightPdf);
     Vector3f d = -WorldToLight(ray.d);
     Float theta = SphericalTheta(d), phi = SphericalPhi(d);
@@ -152,6 +135,14 @@ void PartitionedInfiniteAreaLight::Pdf_Le(const Ray &ray, const Normal3f &,
     *pdfDir = mapPdf / (2 * Pi * Pi * std::sin(theta));
     *pdfPos = 1 / (Pi * worldRadius * worldRadius);
 }
+
+PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
+    const Transform &LightToWorld, const Spectrum &power, int nSamples,
+    PartitionedImage &&Lmap, const Float *distImg, const int distImgWidth,
+    const int distImgHeight)
+    : CloudInfiniteAreaLight(LightToWorld, power, nSamples, distImg,
+                             distImgWidth, distImgHeight),
+      Lmap(std::move(Lmap)) {}
 
 std::shared_ptr<PartitionedInfiniteAreaLight> CreatePartitionedInfiniteLight(
     const Transform &light2world, const ParamSet &paramSet) {
