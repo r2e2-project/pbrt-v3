@@ -271,10 +271,14 @@ const RGBSpectrum &ImagePartition::Texel(int s, int t) const {
 }
 
 RGBSpectrum ImagePartition::Lookup(const Point2f &st) const {
-    Float s = st.x * resolution.x - 0.5f;
-    Float t = st.y * resolution.y - 0.5f;
+    const Float s = st.x * resolution.x - 0.5f;
+    const Float t = st.y * resolution.y - 0.5f;
     int s0 = std::floor(s), t0 = std::floor(t);
-    Float ds = s - s0, dt = t - t0;
+    const Float ds = s - s0, dt = t - t0;
+
+    s0 = (s0 < 0) ? Mod(s0, resolution.x) : s0;
+    t0 = (t0 < 0) ? Mod(t0, resolution.y) : t0;
+
     return (1 - ds) * (1 - dt) * Texel(s0, t0) +
            (1 - ds) * dt * Texel(s0, t0 + 1) +
            ds * (1 - dt) * Texel(s0 + 1, t0) + ds * dt * Texel(s0 + 1, t0 + 1);
