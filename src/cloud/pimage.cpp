@@ -7,10 +7,9 @@
 using namespace std;
 using namespace pbrt;
 
-PartitionedImage::PartitionedImage(const Point2i &resolution,
-                                   const RGBSpectrum *data,
-                                   const size_t partition_count,
-                                   const ImageWrap wrap_mode)
+PartitionedImageHelper::PartitionedImageHelper(const Point2i &resolution,
+                                               const size_t partition_count,
+                                               const ImageWrap wrap_mode)
     : resolution(resolution),
       partition_count(partition_count),
       wrap_mode(wrap_mode) {
@@ -27,38 +26,10 @@ PartitionedImage::PartitionedImage(const Point2i &resolution,
     y_count = static_cast<int>(pow(2, iters / 2));
     w = resolution.x / x_count;
     h = resolution.y / y_count;
-
-    size_t padding = 1;
-    for (size_t i = 0; i < partition_count; i++) {
-        partitions.emplace_back(resolution, data, partition_count, i,
-                                wrap_mode);
-    }
 }
 
-PartitionedImage::PartitionedImage(const Point2i &resolution,
-                                   vector<ImagePartition> &&partitions,
-                                   const ImageWrap wrap_mode)
-    : resolution(resolution),
-      partition_count(partitions.size()),
-      wrap_mode(wrap_mode),
-      partitions(move(partitions)) {
-    if (not IsPowerOf2(resolution.x) or not IsPowerOf2(resolution.y)) {
-        throw runtime_error("image dimensions have to be powers of two");
-    }
-
-    if (not IsPowerOf2(partition_count)) {
-        throw runtime_error("partition count has to be a power of two");
-    }
-
-    const auto iters = static_cast<size_t>(Log2(partition_count));
-    x_count = static_cast<int>(pow(2, (iters + 1) / 2));
-    y_count = static_cast<int>(pow(2, iters / 2));
-    w = resolution.x / x_count;
-    h = resolution.y / y_count;
-}
-
-size_t PartitionedImage::GetPartitionId(const Point2f &st,
-                                        bool &is_black) const {
+size_t PartitionedImageHelper::GetPartitionId(const Point2f &st,
+                                              bool &is_black) const {
     Float s = st.x * resolution.x - 0.5f;
     Float t = st.y * resolution.y - 0.5f;
     int s0 = std::floor(s), t0 = std::floor(t);
@@ -108,9 +79,26 @@ size_t PartitionedImage::GetPartitionId(const Point2f &st,
     return (s_max / w) + (t_max / h) * x_count;
 }
 
+PartitionedImage::PartitionedImage(const Point2i &resolution,
+                                   const RGBSpectrum *data,
+                                   const size_t partition_count,
+                                   const ImageWrap wrap_mode)
+    : helper(resolution, partition_count, wrap_mode) {
+    for (size_t i = 0; i < helper.PartitionCount(); i++) {
+        partitions.emplace_back(resolution, data, partition_count, i,
+                                wrap_mode);
+    }
+}
+
+PartitionedImage::PartitionedImage(const Point2i &resolution,
+                                   vector<ImagePartition> &&partitions,
+                                   const ImageWrap wrap_mode)
+    : helper(resolution, partitions.size(), wrap_mode),
+      partitions(move(partitions)) {}
+
 RGBSpectrum PartitionedImage::Lookup(const Point2f &st) const {
     bool is_black;
-    auto p_id = GetPartitionId(st, is_black);
+    auto p_id = helper.GetPartitionId(st, is_black);
     if (is_black) {
         return {0.f};
     }
