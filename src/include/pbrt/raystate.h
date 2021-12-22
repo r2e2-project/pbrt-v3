@@ -42,6 +42,12 @@ class RayState {
         Vector3f sampledDirection{};
     };
 
+    struct ImageSampleInfo {
+        uint32_t treelet{0};
+        uint32_t imageId{0};
+        Point2f uv{};
+    };
+
     struct Sample {
         uint64_t id;
         Point2f pFilm;
@@ -70,6 +76,10 @@ class RayState {
     /* multiple importance sampling */
     bool isLightRay{false};
     LightRayInfo lightRayInfo{};
+
+    /* needs environment map sampling */
+    bool needsImageSampling{false};
+    ImageSampleInfo imageSampleInfo{};
 
     bool hit{false};
     HitInfo hitInfo{};

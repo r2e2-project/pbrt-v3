@@ -189,6 +189,7 @@ struct __attribute__((packed, aligned(1))) PackedRayFixedHdr {
     uint8_t trackRay : 1;
     uint8_t isShadowRay : 1;
     uint8_t isLightRay : 1;
+    uint8_t needsImageSampling : 1;
     uint8_t hit : 1;
     uint8_t remainingBounces : 5;
 
@@ -206,6 +207,7 @@ struct __attribute__((packed, aligned(1))) PackedRayFixedHdr {
         : trackRay(r.trackRay),
           isShadowRay(r.isShadowRay),
           isLightRay(r.isLightRay),
+          needsImageSampling(r.needsImageSampling),
           hit(r.hit),
           remainingBounces(r.remainingBounces),
           hop(r.hop),
@@ -327,6 +329,21 @@ struct __attribute__((packed, aligned(1))) PackedLightRayInfo {
     }
 };
 
+struct __attribute__((packed, aligned(1))) PackedImageSampleInfo {
+    uint32_t treelet;
+    uint32_t imageId;
+    Packed2f uv;
+
+    PackedImageSampleInfo(const RayState::ImageSampleInfo &isi)
+        : treelet(isi.treelet), imageId(isi.imageId), uv(isi.uv) {}
+
+    void ToImageSampleInfo(RayState::ImageSampleInfo &isi) {
+        isi.treelet = treelet;
+        isi.imageId = imageId;
+        isi.uv = uv.ToPoint2f();
+    }
+};
+
 size_t PackRay(char *bufferStart, const RayState &state) {
     char *buffer = bufferStart;
     PackedRayFixedHdr *hdr = new (buffer) PackedRayFixedHdr(state);
@@ -339,6 +356,11 @@ size_t PackRay(char *bufferStart, const RayState &state) {
     if (hdr->isLightRay) {
         new (buffer) PackedLightRayInfo(state.lightRayInfo);
         buffer += sizeof(PackedLightRayInfo);
+    }
+
+    if (hdr->needsImageSampling) {
+        new (buffer) PackedImageSampleInfo(state.imageSampleInfo);
+        buffer += sizeof(PackedImageSampleInfo);
     }
 
     if (hdr->hit && !hdr->isShadowRay) {
@@ -381,6 +403,7 @@ void UnPackRay(char *buffer, RayState &state) {
     state.remainingBounces = hdr->remainingBounces;
     state.isShadowRay = hdr->isShadowRay;
     state.isLightRay = hdr->isLightRay;
+    state.needsImageSampling = hdr->needsImageSampling;
     state.hit = hdr->hit;
     state.toVisitHead = hdr->toVisitHead;
     buffer += sizeof(PackedRayFixedHdr);
@@ -401,6 +424,14 @@ void UnPackRay(char *buffer, RayState &state) {
         buffer += sizeof(PackedLightRayInfo);
 
         p->ToLightRayInfo(state.lightRayInfo);
+    }
+
+    if (state.needsImageSampling) {
+        PackedImageSampleInfo *p =
+            reinterpret_cast<PackedImageSampleInfo *>(buffer);
+        buffer += sizeof(PackedImageSampleInfo);
+
+        p->ToImageSampleInfo(state.imageSampleInfo);
     }
 
     if (state.hit && !state.isShadowRay) {
@@ -429,7 +460,7 @@ const size_t RayState::MaxPackedSize =
     sizeof(PackedRayFixedHdr) + 64 * sizeof(PackedTreeletNode) +
     sizeof(PackedTreeletNode) + sizeof(PackedDifferentials) +
     sizeof(PackedTransform) + sizeof(PackedHitInfo) +
-    sizeof(PackedLightRayInfo) + 4;
+    sizeof(PackedLightRayInfo) + sizeof(PackedImageSampleInfo) + 4;
 
 size_t RayState::Serialize(char *data) {
     static thread_local char packedBuffer[RayState::MaxPackedSize];
@@ -481,6 +512,10 @@ size_t RayState::MaxSize() const {
 
     if (isLightRay) {
         size += sizeof(PackedLightRayInfo);
+    }
+
+    if (needsImageSampling) {
+        size += sizeof(PackedImageSampleInfo);
     }
 
     if (!toVisitEmpty() && toVisitTop().transformed) {
