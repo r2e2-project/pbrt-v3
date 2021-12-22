@@ -220,9 +220,9 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
             return;
         }
 
-        if (bounceRay) output.rays.push_back(move(bounceRay));
-        if (shadowRay) output.rays.push_back(move(shadowRay));
-        if (lightRay) output.rays.push_back(move(lightRay));
+        if (bounceRay) output.rays[0] = move(bounceRay);
+        if (shadowRay) output.rays[1] = move(shadowRay);
+        if (lightRay) output.rays[2] = move(lightRay);
 
         return;
     } else {
@@ -243,9 +243,9 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
             }
 
             ray.Ld = hit ? 0.f : ray.Ld;
-            output.samples.emplace_back(*tracedRay);
+            output.sample = move(tracedRay);
         } else {
-            output.rays.emplace_back(move(tracedRay));
+            output.rays[0] = move(tracedRay);
         }
     } else if (ray.IsLightRay()) {
         if (emptyVisit) {
@@ -267,13 +267,13 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
 
             if (!Li.IsBlack()) {
                 ray.Ld *= Li;
-                output.samples.push_back(*tracedRay);
+                output.sample = move(tracedRay);
             }
         } else {
-            output.rays.push_back(move(tracedRay));
+            output.rays[0] = move(tracedRay);
         }
     } else if (!emptyVisit or hit) {
-        output.rays.push_back(move(tracedRay));
+        output.rays[0] = move(tracedRay);
     } else if (emptyVisit) {
         ray.Ld = 0.f;
 
@@ -284,7 +284,7 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
         }
 
         output.pathFinished = true;
-        output.samples.push_back(*tracedRay);
+        output.sample = move(tracedRay);
     }
 }
 

@@ -86,8 +86,13 @@ int main(int argc, char const *argv[]) {
                                  *treelets[theRayPtr->CurrentTreelet()],
                                  sceneBase, arena, processOutput);
 
-            for (auto &r : processOutput.rays) rayList.push(move(r));
-            for (auto &s : processOutput.samples) samples.push_back(move(s));
+            for (auto &r : processOutput.rays) {
+                if (r) rayList.push(move(r));
+            }
+
+            if (processOutput.sample) {
+                samples.emplace_back(*processOutput.sample);
+            }
         }
 
         map<pair<float, float>, pbrt::Sample> newSamples;
