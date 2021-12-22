@@ -1442,7 +1442,8 @@ void pbrtLightSource(const std::string &name, const ParamSet &params) {
     }
 
     if (PbrtOptions.dumpScene) {
-        if (lt->GetType() == LightType::Infinite) {
+        if (lt->GetType() == LightType::Infinite &&
+            !params.FindOneFilename("mapname", "").empty()) {
             renderOptions->protoInfiniteLights.push_back(
                 infinite_light::to_protobuf(params, curTransform[0]));
         } else {
