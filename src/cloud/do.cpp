@@ -18,8 +18,6 @@ void usage(const char *argv0) {
     cerr << argv0 << " SCENE-DATA CAMERA-RAYS" << endl;
 }
 
-enum class Operation { Trace, Shade };
-
 int main(int argc, char const *argv[]) {
     try {
         if (argc <= 0) {
@@ -41,6 +39,7 @@ int main(int argc, char const *argv[]) {
         const string raysPath{argv[2]};
 
         pbrt::scene::Base sceneBase = pbrt::scene::LoadBase(scenePath, 0);
+        sceneBase.maxPathDepth = 5;
 
         queue<RayStatePtr> rayList;
         vector<Sample> samples;
@@ -67,10 +66,6 @@ int main(int argc, char const *argv[]) {
 
         /* prepare the scene */
         MemoryArena arena;
-        auto &camera = sceneBase.camera;
-        auto &sampler = sceneBase.sampler;
-        auto &fakeScene = sceneBase.fakeScene;
-
         vector<unique_ptr<CloudBVH>> treelets;
         treelets.resize(sceneBase.GetTreeletCount());
 
@@ -82,86 +77,17 @@ int main(int argc, char const *argv[]) {
             cout << "done." << endl;
         }
 
-        const auto sampleExtent = camera->film->GetSampleBounds().Diagonal();
-        const int maxDepth = 5;
-
         while (!rayList.empty()) {
             RayStatePtr theRayPtr = move(rayList.front());
-            RayState &theRay = *theRayPtr;
             rayList.pop();
 
-            const TreeletId rayTreeletId = theRay.CurrentTreelet();
+            graphics::ProcessRayOutput processOutput;
+            graphics::ProcessRay(move(theRayPtr),
+                                 *treelets[theRayPtr->CurrentTreelet()],
+                                 sceneBase, arena, processOutput);
 
-            if (!theRay.toVisitEmpty()) {
-                auto newRayPtr = graphics::TraceRay(move(theRayPtr),
-                                                    *treelets[rayTreeletId]);
-                auto &newRay = *newRayPtr;
-
-                const bool hit = newRay.HasHit();
-                const bool emptyVisit = newRay.toVisitEmpty();
-
-                if (newRay.IsShadowRay()) {
-                    if (hit || emptyVisit) {
-                        newRay.Ld = hit ? 0.f : newRay.Ld;
-                        samples.emplace_back(*newRayPtr);
-                    } else {
-                        rayList.push(move(newRayPtr));
-                    }
-                } else if (newRay.IsLightRay()) {
-                    if (emptyVisit) {
-                        Spectrum Li{0.f};
-
-                        const auto sLight = newRay.lightRayInfo.sampledLightId;
-
-                        if (newRay.HasHit()) {
-                            const auto aLight = newRay.hitInfo.arealight;
-                            if (aLight == sLight) {
-                                Li = dynamic_pointer_cast<AreaLight>(
-                                         fakeScene->lights[aLight - 1])
-                                         ->L(newRay.hitInfo.isect,
-                                             -newRay.lightRayInfo
-                                                  .sampledDirection);
-                            }
-                        } else {
-                            Li = fakeScene->lights[sLight - 1]->Le(newRay.ray);
-                        }
-
-                        if (!Li.IsBlack()) {
-                            newRay.Ld *= Li;
-                            samples.emplace_back(*newRayPtr);
-                        }
-                    } else {
-                        rayList.push(move(newRayPtr));
-                    }
-                } else if (!emptyVisit || hit) {
-                    rayList.push(move(newRayPtr));
-                } else if (emptyVisit) {
-                    newRay.Ld = 0.f;
-                    if (newRay.remainingBounces == maxDepth - 1) {
-                        for (const auto &light : fakeScene->infiniteLights) {
-                            newRay.Ld += light->Le(newRay.ray);
-                        }
-                    }
-                    samples.emplace_back(*newRayPtr);
-                }
-            } else if (theRay.HasHit()) {
-                RayStatePtr bounceRay, shadowRay, lightRay;
-                tie(bounceRay, shadowRay, lightRay) = graphics::ShadeRay(
-                    move(theRayPtr), *treelets[rayTreeletId], *fakeScene,
-                    sampleExtent, sampler, maxDepth, arena);
-
-                if (bounceRay != nullptr) {
-                    rayList.push(move(bounceRay));
-                }
-
-                if (shadowRay != nullptr) {
-                    rayList.push(move(shadowRay));
-                }
-
-                if (lightRay != nullptr) {
-                    rayList.push(move(lightRay));
-                }
-            }
+            for (auto &r : processOutput.rays) rayList.push(move(r));
+            for (auto &s : processOutput.samples) samples.push_back(move(s));
         }
 
         map<pair<float, float>, pbrt::Sample> newSamples;
@@ -180,8 +106,8 @@ int main(int argc, char const *argv[]) {
             n.push_back(move(s.second));
         }
 
-        graphics::AccumulateImage(camera, n);
-        camera->film->WriteImage();
+        graphics::AccumulateImage(sceneBase.camera, n);
+        sceneBase.camera->film->WriteImage();
     } catch (const exception &e) {
         print_exception(argv[0], e);
         return EXIT_FAILURE;

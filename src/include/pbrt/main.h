@@ -13,6 +13,7 @@
 #include "geometry.h"
 #include "light.h"
 #include "pbrt.h"
+#include "raystate.h"
 #include "transform.h"
 
 namespace pbrt {
@@ -61,6 +62,7 @@ class Base {
     pbrt::Bounds2i sampleBounds{};
     pbrt::Vector2i sampleExtent{};
     size_t totalPaths{0};
+    size_t maxPathDepth{5};
 
     Base();
 
@@ -93,12 +95,16 @@ void DumpSceneObjects(const std::string &description,
 
 namespace graphics {
 
-RayStatePtr TraceRay(RayStatePtr &&rayState, const CloudBVH &treelet);
+struct ProcessRayOutput {
+    uint64_t pathId{0};
+    std::vector<RayStatePtr> rays{};
+    std::vector<Sample> samples{};
+    bool pathFinished{false};
+};
 
-std::tuple<RayStatePtr, RayStatePtr, RayStatePtr> ShadeRay(
-    RayStatePtr &&rayState, const CloudBVH &treelet, const Scene &scene,
-    const Vector2<int> &sampleExtent, std::shared_ptr<GlobalSampler> &sampler,
-    int maxPathDepth, MemoryArena &arena);
+void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
+                scene::Base &sceneBase, MemoryArena &arena,
+                ProcessRayOutput &output);
 
 RayStatePtr GenerateCameraRay(const std::shared_ptr<Camera> &camera,
                               const Point2<int> &pixel,

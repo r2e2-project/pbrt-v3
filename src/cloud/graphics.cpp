@@ -186,8 +186,7 @@ shared_ptr<CloudBVH> LoadTreelet(const string &path, const TreeletId treeletId,
                                  const char *buffer, const size_t length) {
     using namespace pbrt::global;
     manager.init(path);
-    shared_ptr<CloudBVH> treelet =
-        make_shared<CloudBVH>(treeletId, false);
+    shared_ptr<CloudBVH> treelet = make_shared<CloudBVH>(treeletId, false);
     treelet->LoadTreelet(treeletId, buffer, length);
     return treelet;
 }
@@ -196,16 +195,97 @@ shared_ptr<CloudBVH> LoadTreelet(const string &path, const TreeletId treeletId,
 
 namespace graphics {
 
-RayStatePtr TraceRay(RayStatePtr &&rayState, const CloudBVH &treelet) {
-    return CloudIntegrator::Trace(move(rayState), treelet);
-}
+void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
+                scene::Base &sceneBase, MemoryArena &arena,
+                ProcessRayOutput &output) {
+    auto &r = *rayStatePtr;
 
-tuple<RayStatePtr, RayStatePtr, RayStatePtr> ShadeRay(
-    RayStatePtr &&rayState, const CloudBVH &treelet, const Scene &scene,
-    const Vector2i &sampleExtent, shared_ptr<GlobalSampler> &sampler,
-    int maxPathDepth, MemoryArena &arena) {
-    return CloudIntegrator::Shade(move(rayState), treelet, scene, sampleExtent,
-                                  sampler, maxPathDepth, arena);
+    output.pathId = r.PathID();
+    output.pathFinished = false;
+
+    RayStatePtr tracedRay;
+
+    if (!r.toVisitEmpty()) {
+        tracedRay = CloudIntegrator::Trace(move(rayStatePtr), treelet);
+    } else if (r.HasHit()) {
+        RayStatePtr bounceRay, shadowRay, lightRay;
+
+        tie(bounceRay, shadowRay, lightRay) = CloudIntegrator::Shade(
+            move(rayStatePtr), treelet, *sceneBase.fakeScene,
+            sceneBase.sampleExtent, sceneBase.sampler, sceneBase.maxPathDepth,
+            arena);
+
+        if (!bounceRay and !shadowRay) {
+            output.pathFinished = true;
+            return;
+        }
+
+        if (bounceRay) output.rays.push_back(move(bounceRay));
+        if (shadowRay) output.rays.push_back(move(shadowRay));
+        if (lightRay) output.rays.push_back(move(lightRay));
+
+        return;
+    } else {
+        throw runtime_error("ProcessRay: invalid ray");
+    }
+
+    if (!tracedRay) return;
+
+    auto &ray = *tracedRay;
+    const bool hit = ray.HasHit();
+    const bool emptyVisit = ray.toVisitEmpty();
+
+    if (ray.IsShadowRay()) {
+        if (hit or emptyVisit) {
+            /* was this the last shadow ray? */
+            if (ray.remainingBounces == 0) {
+                output.pathFinished = true;
+            }
+
+            ray.Ld = hit ? 0.f : ray.Ld;
+            output.samples.emplace_back(*tracedRay);
+        } else {
+            output.rays.emplace_back(move(tracedRay));
+        }
+    } else if (ray.IsLightRay()) {
+        if (emptyVisit) {
+            Spectrum Li{0.f};
+            const auto sLight = ray.lightRayInfo.sampledLightId;
+
+            if (hit) {
+                const auto aLight = ray.hitInfo.arealight;
+
+                if (aLight == sLight) {
+                    Li = dynamic_cast<AreaLight *>(
+                             sceneBase.fakeScene->lights[aLight - 1].get())
+                             ->L(ray.hitInfo.isect,
+                                 -ray.lightRayInfo.sampledDirection);
+                }
+            } else {
+                Li = sceneBase.fakeScene->lights[sLight - 1]->Le(ray.ray);
+            }
+
+            if (!Li.IsBlack()) {
+                ray.Ld *= Li;
+                output.samples.push_back(*tracedRay);
+            }
+        } else {
+            output.rays.push_back(move(tracedRay));
+        }
+    } else if (!emptyVisit or hit) {
+        output.rays.push_back(move(tracedRay));
+    } else if (emptyVisit) {
+        ray.Ld = 0.f;
+
+        if (ray.remainingBounces == sceneBase.maxPathDepth - 1) {
+            for (const auto &light : sceneBase.fakeScene->infiniteLights) {
+                ray.Ld += light->Le(ray.ray);
+            }
+        }
+
+        output.pathFinished = true;
+        output.samples.push_back(*tracedRay);
+    }
 }
 
 RayStatePtr GenerateCameraRay(const shared_ptr<Camera> &camera,
