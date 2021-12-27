@@ -8,6 +8,7 @@
 #include "accelerators/cloud.h"
 #include "cloud/manager.h"
 #include "core/paramset.h"
+#include "lights/pinfinite.h"
 #include "materials/matte.h"
 
 using namespace std;
@@ -101,7 +102,36 @@ tuple<RayStatePtr, RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
         Vector3f wi;
         Float lightPdf;
         VisibilityTester visibility;
-        Spectrum Li = light->Sample_Li(it, uLight, &wi, &lightPdf, &visibility);
+
+        Spectrum Li{1.f};
+        Optional<RayState::ImageSampleInfo> imageSampleInfo;
+
+        if (light->GetType() == LightType::PartitionedInfinite) {
+            bool isBlack = false;
+            auto pLight = dynamic_cast<CloudInfiniteAreaLight *>(light.get());
+
+            // to get this light's contribution, we need to sample the
+            // envrionment map at this coordinates
+            const auto p = pLight->Sample_Li_SampledPoint(
+                it, uLight, &wi, &lightPdf, &visibility, isBlack);
+
+            if (isBlack) {
+                Li = 0.f;
+            } else {
+                Li = 1.f;
+                auto sampleId = pLight->GetPointImageInfo(p, isBlack);
+                if (isBlack) {
+                    Li = 0.f;
+                } else {
+                    imageSampleInfo.initialize();
+                    imageSampleInfo->uv = p;
+                    imageSampleInfo->treelet = sampleId.first;
+                    imageSampleInfo->imageId = sampleId.second;
+                }
+            }
+        } else {
+            Li = light->Sample_Li(it, uLight, &wi, &lightPdf, &visibility);
+        }
 
         ++totalRays;
 
@@ -121,6 +151,11 @@ tuple<RayStatePtr, RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
                 shadowRay.sample = rayState.sample;
                 shadowRay.ray = visibility.P0().SpawnRayTo(visibility.P1());
                 shadowRay.beta = rayState.beta;
+
+                if (imageSampleInfo.initialized()) {
+                    shadowRay.needsImageSampling = true;
+                    shadowRay.imageSampleInfo = *imageSampleInfo;
+                }
 
                 if (IsDeltaLight(light->flags)) {
                     shadowRay.Ld = (f * Li / lightPdf) / lightSelectPdf;
