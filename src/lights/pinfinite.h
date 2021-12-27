@@ -50,11 +50,13 @@
 
 namespace pbrt {
 
-class CloudInfiniteAreaLight : public Light {
+class BasePartitionedInfiniteAreaLight : public Light {
   public:
-    CloudInfiniteAreaLight(const Transform &LightToWorld, const Spectrum &power,
-                           int nSamples, const Float *distImg,
-                           const int distImgWidth, const int distImgHeight);
+    BasePartitionedInfiniteAreaLight(const Transform &LightToWorld,
+                                     const Spectrum &power, int nSamples,
+                                     const Float *distImg,
+                                     const int distImgWidth,
+                                     const int distImgHeight);
 
     void Preprocess(const Scene &scene) {
         scene.WorldBound().BoundingSphere(&worldCenter, &worldRadius);
@@ -101,8 +103,22 @@ class CloudInfiniteAreaLight : public Light {
     Float worldRadius;
 };
 
+class CloudInfiniteAreaLight : public BasePartitionedInfiniteAreaLight {
+  public:
+    CloudInfiniteAreaLight(const Transform &LightToWorld, const Spectrum &power,
+                           int nSamples, const Float *distImg,
+                           const int distImgWidth, const int distImgHeight,
+                           const Point2i &fullResolution,
+                           const std::vector<uint32_t> &treeletMapping);
+
+    std::pair<uint32_t, uint32_t> GetPointImageInfo(const Point2f &uv);
+
+  private:
+    PartitionedImageHelper pImageHelper;
+};
+
 // InfiniteAreaLight Declarations
-class PartitionedInfiniteAreaLight : public CloudInfiniteAreaLight {
+class PartitionedInfiniteAreaLight : public BasePartitionedInfiniteAreaLight {
   public:
     // InfiniteAreaLight Public Methods
     PartitionedInfiniteAreaLight(const Transform &LightToWorld,

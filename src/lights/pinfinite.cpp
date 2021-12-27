@@ -41,7 +41,7 @@
 namespace pbrt {
 
 // PartitionedInfiniteAreaLight Method Definitions
-CloudInfiniteAreaLight::CloudInfiniteAreaLight(
+BasePartitionedInfiniteAreaLight::BasePartitionedInfiniteAreaLight(
     const Transform &LightToWorld, const Spectrum &power, int nSamples,
     const Float *distImg, const int distImgWidth, const int distImgHeight)
     : Light((int)LightFlags::Infinite, LightToWorld, MediumInterface(),
@@ -51,11 +51,11 @@ CloudInfiniteAreaLight::CloudInfiniteAreaLight(
       distribution(std::make_unique<Distribution2D>(distImg, distImgWidth,
                                                     distImgHeight)) {}
 
-Spectrum CloudInfiniteAreaLight::Power() const {
+Spectrum BasePartitionedInfiniteAreaLight::Power() const {
     return Pi * worldRadius * worldRadius * power * L;
 }
 
-Point2f CloudInfiniteAreaLight::Le_SampledPoint(
+Point2f BasePartitionedInfiniteAreaLight::Le_SampledPoint(
     const RayDifferential &ray) const {
     Vector3f w = Normalize(WorldToLight(ray.d));
     Point2f st(SphericalPhi(w) * Inv2Pi, SphericalTheta(w) * InvPi);
@@ -63,11 +63,9 @@ Point2f CloudInfiniteAreaLight::Le_SampledPoint(
     // return Spectrum(Lmap.Lookup(st) * L, SpectrumType::Illuminant);
 }
 
-Point2f CloudInfiniteAreaLight::Sample_Li_SampledPoint(const Interaction &ref,
-                                                       const Point2f &u,
-                                                       Vector3f *wi, Float *pdf,
-                                                       VisibilityTester *vis,
-                                                       bool &isBlack) const {
+Point2f BasePartitionedInfiniteAreaLight::Sample_Li_SampledPoint(
+    const Interaction &ref, const Point2f &u, Vector3f *wi, Float *pdf,
+    VisibilityTester *vis, bool &isBlack) const {
     ProfilePhase _(Prof::LightSample);
 
     isBlack = false;
@@ -97,8 +95,8 @@ Point2f CloudInfiniteAreaLight::Sample_Li_SampledPoint(const Interaction &ref,
     // return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
 }
 
-Float CloudInfiniteAreaLight::Pdf_Li(const Interaction &,
-                                     const Vector3f &w) const {
+Float BasePartitionedInfiniteAreaLight::Pdf_Li(const Interaction &,
+                                               const Vector3f &w) const {
     ProfilePhase _(Prof::LightPdf);
     Vector3f wi = WorldToLight(w);
     Float theta = SphericalTheta(wi), phi = SphericalPhi(wi);
@@ -108,7 +106,7 @@ Float CloudInfiniteAreaLight::Pdf_Li(const Interaction &,
            (2 * Pi * Pi * sinTheta);
 }
 
-Point2f CloudInfiniteAreaLight::Sample_Le_SampledPoint(
+Point2f BasePartitionedInfiniteAreaLight::Sample_Le_SampledPoint(
     const Point2f &u1, const Point2f &u2, Float time, Ray *ray,
     Normal3f *nLight, Float *pdfPos, Float *pdfDir, bool &isBlack) const {
     ProfilePhase _(Prof::LightSample);
@@ -144,8 +142,9 @@ Point2f CloudInfiniteAreaLight::Sample_Le_SampledPoint(
     // return Spectrum(Lmap.Lookup(uv) * L, SpectrumType::Illuminant);
 }
 
-void CloudInfiniteAreaLight::Pdf_Le(const Ray &ray, const Normal3f &,
-                                    Float *pdfPos, Float *pdfDir) const {
+void BasePartitionedInfiniteAreaLight::Pdf_Le(const Ray &ray, const Normal3f &,
+                                              Float *pdfPos,
+                                              Float *pdfDir) const {
     ProfilePhase _(Prof::LightPdf);
     Vector3f d = -WorldToLight(ray.d);
     Float theta = SphericalTheta(d), phi = SphericalPhi(d);
@@ -159,8 +158,8 @@ PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
     const Transform &LightToWorld, const Spectrum &power, int nSamples,
     PartitionedImage &&Lmap, const Float *distImg, const int distImgWidth,
     const int distImgHeight)
-    : CloudInfiniteAreaLight(LightToWorld, power, nSamples, distImg,
-                             distImgWidth, distImgHeight),
+    : BasePartitionedInfiniteAreaLight(LightToWorld, power, nSamples, distImg,
+                                       distImgWidth, distImgHeight),
       Lmap(std::move(Lmap)) {}
 
 std::shared_ptr<PartitionedInfiniteAreaLight> CreatePartitionedInfiniteLight(
