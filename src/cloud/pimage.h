@@ -42,13 +42,17 @@ class PartitionedImageHelper {
     const ImageWrap wrap_mode;
     int x_count{}, y_count{};
     int w{}, h{};
+    std::vector<uint32_t> treelet_mapping;
 
   public:
     PartitionedImageHelper(const Point2i &resolution,
                            const size_t partition_count,
-                           const ImageWrap wrap_mode);
+                           const ImageWrap wrap_mode,
+                           const std::vector<uint32_t> &treelet_mapping = {});
 
     size_t GetPartitionId(const Point2f &st, bool &is_black) const;
+
+    uint32_t GetPartitionTreeletId(const size_t partition_id) const;
 
     size_t PartitionCount() const { return partition_count; }
     ImageWrap WrapMode() const { return wrap_mode; }

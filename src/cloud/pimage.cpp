@@ -7,12 +7,13 @@
 using namespace std;
 using namespace pbrt;
 
-PartitionedImageHelper::PartitionedImageHelper(const Point2i &resolution,
-                                               const size_t partition_count,
-                                               const ImageWrap wrap_mode)
+PartitionedImageHelper::PartitionedImageHelper(
+    const Point2i &resolution, const size_t partition_count,
+    const ImageWrap wrap_mode, const std::vector<uint32_t> &treelet_mapping)
     : resolution(resolution),
       partition_count(partition_count),
-      wrap_mode(wrap_mode) {
+      wrap_mode(wrap_mode),
+      treelet_mapping(treelet_mapping) {
     if (not IsPowerOf2(resolution.x) or not IsPowerOf2(resolution.y)) {
         throw runtime_error("image dimensions have to be powers of two");
     }
@@ -77,6 +78,15 @@ size_t PartitionedImageHelper::GetPartitionId(const Point2f &st,
     }
 
     return (s_max / w) + (t_max / h) * x_count;
+}
+
+uint32_t PartitionedImageHelper::GetPartitionTreeletId(
+    const size_t partition_id) const {
+    if (treelet_mapping.empty()) {
+        throw runtime_error("treelet mapping not set");
+    }
+
+    return treelet_mapping.at(partition_id);
 }
 
 PartitionedImage::PartitionedImage(const Point2i &resolution,
