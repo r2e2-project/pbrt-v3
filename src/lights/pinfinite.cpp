@@ -154,6 +154,23 @@ void BasePartitionedInfiniteAreaLight::Pdf_Le(const Ray &ray, const Normal3f &,
     *pdfPos = 1 / (Pi * worldRadius * worldRadius);
 }
 
+CloudInfiniteAreaLight::CloudInfiniteAreaLight(
+    const Transform &LightToWorld, const Spectrum &power, int nSamples,
+    const Float *distImg, const int distImgWidth, const int distImgHeight,
+    const Point2i &fullResolution, const std::vector<uint32_t> &treeletMapping)
+    : BasePartitionedInfiniteAreaLight(LightToWorld, power, nSamples, distImg,
+                                       distImgWidth, distImgHeight),
+      pImageHelper(fullResolution, treeletMapping.size(), ImageWrap::Repeat,
+                   treeletMapping) {}
+
+std::pair<uint32_t, uint32_t> CloudInfiniteAreaLight::GetPointImageInfo(
+    const Point2f &uv, bool &isBlack) const {
+    const auto partition = pImageHelper.GetPartitionId(uv, isBlack);
+    if (isBlack) return {0, 0};
+    const auto treelet = pImageHelper.GetPartitionTreeletId(partition);
+    return std::make_pair(treelet, partition);
+}
+
 PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
     const Transform &LightToWorld, const Spectrum &power, int nSamples,
     PartitionedImage &&Lmap, const Float *distImg, const int distImgWidth,

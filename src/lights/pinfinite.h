@@ -111,7 +111,8 @@ class CloudInfiniteAreaLight : public BasePartitionedInfiniteAreaLight {
                            const Point2i &fullResolution,
                            const std::vector<uint32_t> &treeletMapping);
 
-    std::pair<uint32_t, uint32_t> GetPointImageInfo(const Point2f &uv);
+    std::pair<uint32_t, uint32_t> GetPointImageInfo(const Point2f &uv,
+                                                    bool &isBlack) const;
 
   private:
     PartitionedImageHelper pImageHelper;
