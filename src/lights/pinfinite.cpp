@@ -63,10 +63,21 @@ Point2f CloudInfiniteAreaLight::Le_SampledPoint(
     // return Spectrum(Lmap.Lookup(st) * L, SpectrumType::Illuminant);
 }
 
-Point2f CloudInfiniteAreaLight::Sample_Li_SampledPoint(
-    const Interaction &ref, const Point2f &u, Vector3f *wi, Float *pdf,
-    VisibilityTester *vis, const Point2f &uv, const Float mapPdf) const {
+Point2f CloudInfiniteAreaLight::Sample_Li_SampledPoint(const Interaction &ref,
+                                                       const Point2f &u,
+                                                       Vector3f *wi, Float *pdf,
+                                                       VisibilityTester *vis,
+                                                       bool &isBlack) const {
     ProfilePhase _(Prof::LightSample);
+
+    isBlack = false;
+
+    Float mapPdf;
+    Point2f uv = distribution->SampleContinuous(u, &mapPdf);
+    if (mapPdf == 0) {
+        isBlack = true;
+        return {};
+    }
 
     // Convert infinite light sample point to direction
     Float theta = uv[1] * Pi, phi = uv[0] * 2 * Pi;
@@ -99,9 +110,17 @@ Float CloudInfiniteAreaLight::Pdf_Li(const Interaction &,
 
 Point2f CloudInfiniteAreaLight::Sample_Le_SampledPoint(
     const Point2f &u1, const Point2f &u2, Float time, Ray *ray,
-    Normal3f *nLight, Float *pdfPos, Float *pdfDir, const Point2f &uv,
-    const Float mapPdf) const {
+    Normal3f *nLight, Float *pdfPos, Float *pdfDir, bool &isBlack) const {
     ProfilePhase _(Prof::LightSample);
+
+    isBlack = false;
+
+    Float mapPdf;
+    Point2f uv = distribution->SampleContinuous(u1, &mapPdf);
+    if (mapPdf == 0) {
+        isBlack = true;
+        return {};
+    }
 
     Float theta = uv[1] * Pi, phi = uv[0] * 2.f * Pi;
     Float cosTheta = std::cos(theta), sinTheta = std::sin(theta);

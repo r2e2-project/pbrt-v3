@@ -83,12 +83,11 @@ class CloudInfiniteAreaLight : public Light {
     Point2f Le_SampledPoint(const RayDifferential &ray) const;
     Point2f Sample_Li_SampledPoint(const Interaction &ref, const Point2f &u,
                                    Vector3f *wi, Float *pdf,
-                                   VisibilityTester *vis, const Point2f &uv,
-                                   const Float mapPdf) const;
+                                   VisibilityTester *vis, bool &isBlack) const;
     Point2f Sample_Le_SampledPoint(const Point2f &u1, const Point2f &u2,
                                    Float time, Ray *ray, Normal3f *nLight,
                                    Float *pdfPos, Float *pdfDir,
-                                   const Point2f &uv, const Float mapPdf) const;
+                                   bool &isBlack) const;
 
     LightType GetType() const { return LightType::PartitionedInfinite; }
 
@@ -119,25 +118,27 @@ class PartitionedInfiniteAreaLight : public CloudInfiniteAreaLight {
 
     Spectrum Sample_Li(const Interaction &ref, const Point2f &u, Vector3f *wi,
                        Float *pdf, VisibilityTester *vis) const {
-        Float mapPdf;
-        Point2f uv = distribution->SampleContinuous(u, &mapPdf);
-        if (mapPdf == 0) return Spectrum(0.f);
+        bool isBlack = false;
+        const auto p = Sample_Li_SampledPoint(ref, u, wi, pdf, vis, isBlack);
 
-        const auto p = Sample_Li_SampledPoint(ref, u, wi, pdf, vis, uv, mapPdf);
-        return Spectrum(Lmap.Lookup(p) * L, SpectrumType::Illuminant);
+        if (isBlack) {
+            return Spectrum{0.f};
+        } else {
+            return Spectrum(Lmap.Lookup(p) * L, SpectrumType::Illuminant);
+        }
     }
 
     Spectrum Sample_Le(const Point2f &u1, const Point2f &u2, Float time,
                        Ray *ray, Normal3f *nLight, Float *pdfPos,
                        Float *pdfDir) const {
-        Float mapPdf;
-        Point2f uv = distribution->SampleContinuous(u1, &mapPdf);
-        if (mapPdf == 0) return Spectrum(0.f);
-
+        bool isBlack = false;
         const auto p = Sample_Le_SampledPoint(u1, u2, time, ray, nLight, pdfPos,
-                                              pdfDir, uv, mapPdf);
-
-        return Spectrum(Lmap.Lookup(p) * L, SpectrumType::Illuminant);
+                                              pdfDir, isBlack);
+        if (isBlack) {
+            return Spectrum{0.f};
+        } else {
+            return Spectrum(Lmap.Lookup(p) * L, SpectrumType::Illuminant);
+        }
     }
 
   private:
