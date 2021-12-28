@@ -174,6 +174,7 @@ Base::Base(const std::string &path, const int samplesPerPixel) {
                 proto_light.environment_map().importance_map().data()),
             proto_light.environment_map().importance_map_resolution().x(),
             proto_light.environment_map().importance_map_resolution().y()));
+        lights.back()->SetID(lights.size());
     }
 
     reader = manager.GetReader(ObjectType::Scene);

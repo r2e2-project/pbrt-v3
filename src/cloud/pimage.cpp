@@ -233,7 +233,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
     : resolution(resolution),
       partition_count(partition_count),
       partition_idx(partition_idx),
-      data(move(partition_data)) {
+      data(partition_data) {
     if (not IsPowerOf2(resolution.x) or not IsPowerOf2(resolution.y)) {
         throw runtime_error("image dimensions have to be powers of two");
     }
