@@ -12,6 +12,7 @@
 #include "core/paramset.h"
 #include "messages/serialization.h"
 #include "pbrt/common.h"
+#include "pimage.h"
 #include "util/optional.h"
 #include "util/path.h"
 #include "util/util.h"
@@ -163,15 +164,11 @@ class SceneManager {
 
     bool hasInMemoryTextures() const { return not inMemoryTextures.empty(); }
 
-    void addInMemoryImagePartition(const uint32_t pid,
-                                   std::shared_ptr<RGBSpectrum>&& data,
-                                   const size_t length) {
-        inMemoryImagePartitions.emplace(pid,
-                                        make_pair(std::move(data), length));
+    void addInMemoryImagePartition(const uint32_t pid, ImagePartition&& data) {
+        inMemoryImagePartitions.emplace(pid, std::move(data));
     }
 
-    std::pair<std::shared_ptr<RGBSpectrum>, size_t> getInMemoryImagePartition(
-        const uint32_t pid) {
+    ImagePartition& getInMemoryImagePartition(const uint32_t pid) {
         return inMemoryImagePartitions.at(pid);
     }
 
@@ -192,8 +189,7 @@ class SceneManager {
     std::map<std::string, std::pair<std::shared_ptr<char>, size_t>>
         inMemoryTextures;
 
-    std::map<uint32_t, std::pair<std::shared_ptr<RGBSpectrum>, size_t>>
-        inMemoryImagePartitions;
+    std::map<uint32_t, ImagePartition> inMemoryImagePartitions;
 
     // Dumping treelets
     std::map<const TriangleMesh*, uint32_t> tmMaterialIds;

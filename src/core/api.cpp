@@ -2057,11 +2057,10 @@ Scene *RenderOptions::MakeScene() {
             std::vector<ImagePartition> imagePartitions;
             for (size_t i = 0; i < partitionCount; i++) {
                 imagePartitions.emplace_back(
-                    resolution, partitionCount, i, 1,
-                    _manager.getInMemoryImagePartition(baseId + i).first);
+                    std::move(_manager.getInMemoryImagePartition(baseId + i)));
             }
 
-            PartitionedImage pImage{resolution, move(imagePartitions),
+            PartitionedImage pImage{resolution, std::move(imagePartitions),
                                     ImageWrap::Repeat};
 
             auto pLight = std::make_shared<PartitionedInfiniteAreaLight>(
