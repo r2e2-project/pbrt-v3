@@ -6,6 +6,7 @@
 #include "core/stats.h"
 #include "integrators/cloud.h"
 #include "lights/diffuse.h"
+#include "lights/pinfinite.h"
 #include "messages/serdes.h"
 #include "messages/utils.h"
 #include "pbrt/main.h"
@@ -149,6 +150,7 @@ Base::Base(const std::string &path, const int samplesPerPixel) {
         }
     }
 
+    // loading normal lights
     reader = manager.GetReader(ObjectType::Lights);
     while (!reader->eof()) {
         protobuf::Light proto_light;
@@ -158,6 +160,20 @@ Base::Base(const std::string &path, const int samplesPerPixel) {
 
     for (uint32_t i = 0; i < lights.size(); i++) {
         lights[i]->SetID(i + 1);
+    }
+
+    // loading infinite lights with texture maps
+    reader = manager.GetReader(ObjectType::InfiniteLights);
+    while (!reader->eof()) {
+        protobuf::InfiniteLight proto_light;
+        reader->read(&proto_light);
+        lights.emplace_back(std::make_shared<CloudInfiniteAreaLight>(
+            from_protobuf(proto_light.light().light_to_world()),
+            from_protobuf(proto_light.power()), 1,
+            reinterpret_cast<const Float *>(
+                proto_light.environment_map().importance_map().data()),
+            proto_light.environment_map().importance_map_resolution().x(),
+            proto_light.environment_map().importance_map_resolution().y()));
     }
 
     reader = manager.GetReader(ObjectType::Scene);
