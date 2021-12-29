@@ -331,14 +331,38 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
     } else if (emptyVisit) {
         ray.Ld = 0.f;
 
+        bool sampleDone = true;
         if (ray.remainingBounces == sceneBase.maxPathDepth - 1) {
             for (const auto &light : sceneBase.fakeScene->infiniteLights) {
-                ray.Ld += light->Le(ray.ray);
+                if (light->GetType() == LightType::PartitionedInfinite) {
+                    ray.Ld = 1.f;
+
+                    bool isBlack = false;
+                    auto pLight =
+                        dynamic_cast<CloudInfiniteAreaLight *>(light.get());
+                    auto uv = pLight->Le_SampledPoint(ray.ray);
+                    auto img = pLight->GetPointImageInfo(uv, isBlack);
+
+                    if (!isBlack) {
+                        ray.needsImageSampling = true;
+                        ray.imageSampleInfo.uv = uv;
+                        ray.imageSampleInfo.treelet = img.first;
+                        ray.imageSampleInfo.imageId = img.second;
+                        output.rays[0] = move(tracedRay);
+                    }
+
+                    sampleDone = false;
+                    break;
+                } else {
+                    ray.Ld += light->Le(ray.ray);
+                }
             }
         }
 
-        output.pathFinished = true;
-        output.sample = move(tracedRay);
+        if (sampleDone) {
+            output.pathFinished = true;
+            output.sample = move(tracedRay);
+        }
     }
 }
 
