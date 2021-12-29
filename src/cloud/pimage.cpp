@@ -266,6 +266,7 @@ void ImagePartition::WriteImage(const string &filename) const {
     fout.write(reinterpret_cast<const char *>(&partition_count), sizeof(int));
     fout.write(reinterpret_cast<const char *>(data),
                W * H * sizeof(RGBSpectrum));
+    fout.close();
 }
 
 const RGBSpectrum &ImagePartition::Texel(int s, int t) const {

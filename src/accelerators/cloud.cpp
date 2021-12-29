@@ -283,10 +283,11 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     for (size_t i = 0; i < included_image_partitions; i++) {
         const uint32_t id = reader->read<uint32_t>();
         const size_t len = reader->next_record_size();
-        shared_ptr<char> image{new char[len], default_delete<char[]>()};
-        ImagePartition partition{image};
 
+        shared_ptr<char> image{new char[len], default_delete<char[]>()};
         reader->read(image.get(), len);
+
+        ImagePartition partition{image};
         _manager.addInMemoryImagePartition(id, move(partition));
     }
 
