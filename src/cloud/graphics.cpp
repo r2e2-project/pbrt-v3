@@ -168,19 +168,19 @@ Base::Base(const std::string &path, const int samplesPerPixel) {
         protobuf::InfiniteLight proto_light;
         reader->read(&proto_light);
 
+        auto &envmap_proto = proto_light.environment_map();
+
         vector<uint32_t> treeletMapping{
-            proto_light.environment_map().partition_treelets().begin(),
-            proto_light.environment_map().partition_treelets().end()};
+            envmap_proto.partition_treelets().begin(),
+            envmap_proto.partition_treelets().end()};
 
         lights.emplace_back(std::make_shared<CloudInfiniteAreaLight>(
             from_protobuf(proto_light.light().light_to_world()),
             from_protobuf(proto_light.power()), 1,
-            reinterpret_cast<const Float *>(
-                proto_light.environment_map().importance_map().data()),
-            proto_light.environment_map().importance_map_resolution().x(),
-            proto_light.environment_map().importance_map_resolution().y(),
-            from_protobuf(proto_light.environment_map().resolution()),
-            treeletMapping));
+            reinterpret_cast<const RGBSpectrum *>(
+                envmap_proto.downsampled_image().data()),
+            from_protobuf(envmap_proto.downsampled_image_resolution()),
+            from_protobuf(envmap_proto.resolution()), treeletMapping));
 
         lights.back()->SetID(lights.size());
     }

@@ -545,8 +545,8 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
     protobuf::EnvironmentMap proto_envmap;
 
     // constexpr size_t MAX_PARTITION_SIZE = 1024 * 1024 * 1025; /* 1 GB */
-    constexpr size_t MAX_PARTITION_SIZE = 8 * 1024 * 1024;      /* 8 MB */
-    constexpr size_t MAX_IMPORTANCE_MAP_SIZE = 1 * 1024 * 1024; /* 1 MB */
+    constexpr size_t MAX_PARTITION_SIZE = 8 * 1024 * 1024;   /* 8 MB */
+    constexpr size_t MAX_DOWNSAMPLED_SIZE = 1 * 1024 * 1024; /* 1 MB */
 
     Point2i resolution;
     auto map = ReadImage(texmap, &resolution);
@@ -577,43 +577,35 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
         partitioned_image.GetPartition(i).WriteImage(partition_path);
     }
 
-    // taking care of the importance map
+    // downsample the Lmap to make it fit
     MIPMap<RGBSpectrum> lmap{resolution, map.get()};
-    int width = resolution.x * 2;
-    int height = resolution.y * 2;
+    Point2i ds_res = resolution;
 
-    if (width * height * sizeof(Float) > MAX_IMPORTANCE_MAP_SIZE) {
-        const float f = std::sqrt(1.f * width * height * sizeof(Float) /
-                                  MAX_IMPORTANCE_MAP_SIZE);
-        LOG(INFO) << "Downsampling importance map from (" << width << ", "
-                  << height << ")";
+    bool resize_width = true;
+    while (ds_res.x * ds_res.y * sizeof(RGBSpectrum) > MAX_DOWNSAMPLED_SIZE) {
+        if (resize_width) {
+            ds_res.x /= 2;
+        } else {
+            ds_res.y /= 2;
+        }
 
-        width = std::ceil(width / f);
-        height = std::ceil(height / f);
-
-        LOG(INFO) << "New size is (" << width << ", " << height << ")";
+        resize_width = !resize_width;
     }
 
-    unique_ptr<Float[]> imp_map(new Float[width * height]);
-    const float fwidth = 0.5f / std::min(width, height);
-    ParallelFor(
-        [&](int64_t v) {
-            Float vp = (v + .5f) / (Float)height;
-            Float sinTheta = std::sin(Pi * (v + .5f) / height);
-            for (int u = 0; u < width; ++u) {
-                Float up = (u + .5f) / (Float)width;
-                imp_map[u + v * width] =
-                    lmap.Lookup(Point2f(up, vp), fwidth).y();
-                imp_map[u + v * width] *= sinTheta;
-            }
-        },
-        height, 32);
+    unique_ptr<RGBSpectrum[]> ds_lmap(new RGBSpectrum[ds_res.x * ds_res.y]);
 
-    proto_envmap.mutable_importance_map_resolution()->set_x(width);
-    proto_envmap.mutable_importance_map_resolution()->set_y(height);
-    proto_envmap.set_importance_map(
-        reinterpret_cast<const char*>(imp_map.get()),
-        width * height * sizeof(Float));
+    for (int x = 0; x < ds_res.x; x++) {
+        for (int y = 0; y < ds_res.y; y++) {
+            ds_lmap[x + y * ds_res.x] =
+                lmap.Lookup({1.f * x / ds_res.x, 1.f * y / ds_res.y});
+        }
+    }
+
+    proto_envmap.mutable_downsampled_image_resolution()->set_x(ds_res.x);
+    proto_envmap.mutable_downsampled_image_resolution()->set_y(ds_res.y);
+    proto_envmap.set_downsampled_image(
+        reinterpret_cast<const char*>(ds_lmap.get()),
+        ds_res.x * ds_res.y * sizeof(RGBSpectrum));
 
     *proto_light.mutable_environment_map() = proto_envmap;
     *proto_light.mutable_power() = to_protobuf(Spectrum(

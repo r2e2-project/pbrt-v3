@@ -2066,10 +2066,10 @@ Scene *RenderOptions::MakeScene() {
             auto pLight = std::make_shared<PartitionedInfiniteAreaLight>(
                 from_protobuf(proto.light().light_to_world()),
                 from_protobuf(proto.power()), 1, std::move(pImage),
-                reinterpret_cast<const Float *>(
-                    proto.environment_map().importance_map().data()),
-                proto.environment_map().importance_map_resolution().x(),
-                proto.environment_map().importance_map_resolution().y());
+                reinterpret_cast<const RGBSpectrum *>(
+                    proto.environment_map().downsampled_image().data()),
+                from_protobuf(
+                    proto.environment_map().downsampled_image_resolution()));
 
             lights.emplace_back(std::move(pLight));
         }

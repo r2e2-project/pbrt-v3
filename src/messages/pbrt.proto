@@ -155,8 +155,8 @@ message EnvironmentMap {
     uint32 partition_count = 2;
     uint32 first_partition_id = 3;
     repeated uint32 partition_treelets = 4;
-    Point2i importance_map_resolution = 5;
-    bytes importance_map = 6;
+    Point2i downsampled_image_resolution = 5;
+    bytes downsampled_image = 6;
 }
 
 message InfiniteLight {
