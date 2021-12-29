@@ -54,29 +54,20 @@ class BasePartitionedInfiniteAreaLight : public Light {
   public:
     BasePartitionedInfiniteAreaLight(const Transform &LightToWorld,
                                      const Spectrum &power, int nSamples,
-                                     const Float *distImg,
-                                     const int distImgWidth,
-                                     const int distImgHeight);
+                                     const RGBSpectrum *downsampledImg,
+                                     const Point2i &downsampledImgResolution);
 
     void Preprocess(const Scene &scene) {
         scene.WorldBound().BoundingSphere(&worldCenter, &worldRadius);
     }
 
     Spectrum Power() const;
-    Spectrum Le(const RayDifferential &ray) const {
-        throw std::runtime_error("must not be called");
-    }
-
+    Spectrum Le(const RayDifferential &ray) const;
     Spectrum Sample_Li(const Interaction &ref, const Point2f &u, Vector3f *wi,
-                       Float *pdf, VisibilityTester *vis) const {
-        throw std::runtime_error("must not be called");
-    }
-
+                       Float *pdf, VisibilityTester *vis) const;
     Spectrum Sample_Le(const Point2f &u1, const Point2f &u2, Float time,
                        Ray *ray, Normal3f *nLight, Float *pdfPos,
-                       Float *pdfDir) const {
-        throw std::runtime_error("must not be called");
-    }
+                       Float *pdfDir) const;
 
     Float Pdf_Li(const Interaction &, const Vector3f &) const;
     void Pdf_Le(const Ray &, const Normal3f &, Float *pdfPos,
@@ -95,6 +86,7 @@ class BasePartitionedInfiniteAreaLight : public Light {
 
   protected:
     Spectrum L;
+    std::unique_ptr<MIPMap<RGBSpectrum>> downsampledLmap;
     std::unique_ptr<Distribution2D> distribution;
 
   private:
@@ -106,8 +98,8 @@ class BasePartitionedInfiniteAreaLight : public Light {
 class CloudInfiniteAreaLight : public BasePartitionedInfiniteAreaLight {
   public:
     CloudInfiniteAreaLight(const Transform &LightToWorld, const Spectrum &power,
-                           int nSamples, const Float *distImg,
-                           const int distImgWidth, const int distImgHeight,
+                           int nSamples, const RGBSpectrum *downsampledImg,
+                           const Point2i &downsampledImgResolution,
                            const Point2i &fullResolution,
                            const std::vector<uint32_t> &treeletMapping);
 
@@ -124,9 +116,9 @@ class PartitionedInfiniteAreaLight : public BasePartitionedInfiniteAreaLight {
     // InfiniteAreaLight Public Methods
     PartitionedInfiniteAreaLight(const Transform &LightToWorld,
                                  const Spectrum &power, int nSamples,
-                                 PartitionedImage &&Lmap, const Float *distImg,
-                                 const int distImgWidth,
-                                 const int distImgHeight);
+                                 PartitionedImage &&Lmap,
+                                 const RGBSpectrum *downsampledImg,
+                                 const Point2i &downsampledImgResolution);
 
     Spectrum Le(const RayDifferential &ray) const {
         const auto uv = Le_SampledPoint(ray);

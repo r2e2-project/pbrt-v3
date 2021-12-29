@@ -43,13 +43,69 @@ namespace pbrt {
 // PartitionedInfiniteAreaLight Method Definitions
 BasePartitionedInfiniteAreaLight::BasePartitionedInfiniteAreaLight(
     const Transform &LightToWorld, const Spectrum &power, int nSamples,
-    const Float *distImg, const int distImgWidth, const int distImgHeight)
+    const RGBSpectrum *downsampledImg, const Point2i &downsampledImgResolution)
     : Light((int)LightFlags::Infinite, LightToWorld, MediumInterface(),
             nSamples),
       L(1.f),
-      power(power),
-      distribution(std::make_unique<Distribution2D>(distImg, distImgWidth,
-                                                    distImgHeight)) {}
+      power(power) {
+    downsampledLmap.reset(
+        new MIPMap<RGBSpectrum>(downsampledImgResolution, downsampledImg));
+
+    // Compute scalar-valued image _img_ from environment map
+    int width = 2 * downsampledLmap->Width(),
+        height = 2 * downsampledLmap->Height();
+    std::unique_ptr<Float[]> img(new Float[width * height]);
+    float fwidth = 0.5f / std::min(width, height);
+    ParallelFor(
+        [&](int64_t v) {
+            Float vp = (v + .5f) / (Float)height;
+            Float sinTheta = std::sin(Pi * (v + .5f) / height);
+            for (int u = 0; u < width; ++u) {
+                Float up = (u + .5f) / (Float)width;
+                img[u + v * width] =
+                    downsampledLmap->Lookup(Point2f(up, vp), fwidth).y();
+                img[u + v * width] *= sinTheta;
+            }
+        },
+        height, 32);
+
+    // Compute sampling distributions for rows and columns of image
+    distribution.reset(new Distribution2D(img.get(), width, height));
+}
+
+Spectrum BasePartitionedInfiniteAreaLight::Le(
+    const RayDifferential &ray) const {
+    const auto uv = Le_SampledPoint(ray);
+    return Spectrum(downsampledLmap->Lookup(uv) * L, SpectrumType::Illuminant);
+}
+
+Spectrum BasePartitionedInfiniteAreaLight::Sample_Li(
+    const Interaction &ref, const Point2f &u, Vector3f *wi, Float *pdf,
+    VisibilityTester *vis) const {
+    bool isBlack = false;
+    const auto p = Sample_Li_SampledPoint(ref, u, wi, pdf, vis, isBlack);
+
+    if (isBlack) {
+        return Spectrum{0.f};
+    } else {
+        return Spectrum(downsampledLmap->Lookup(p) * L,
+                        SpectrumType::Illuminant);
+    }
+}
+
+Spectrum BasePartitionedInfiniteAreaLight::Sample_Le(
+    const Point2f &u1, const Point2f &u2, Float time, Ray *ray,
+    Normal3f *nLight, Float *pdfPos, Float *pdfDir) const {
+    bool isBlack = false;
+    const auto p = Sample_Le_SampledPoint(u1, u2, time, ray, nLight, pdfPos,
+                                          pdfDir, isBlack);
+    if (isBlack) {
+        return Spectrum{0.f};
+    } else {
+        return Spectrum(downsampledLmap->Lookup(p) * L,
+                        SpectrumType::Illuminant);
+    }
+}
 
 Spectrum BasePartitionedInfiniteAreaLight::Power() const {
     return Pi * worldRadius * worldRadius * power * L;
@@ -156,10 +212,11 @@ void BasePartitionedInfiniteAreaLight::Pdf_Le(const Ray &ray, const Normal3f &,
 
 CloudInfiniteAreaLight::CloudInfiniteAreaLight(
     const Transform &LightToWorld, const Spectrum &power, int nSamples,
-    const Float *distImg, const int distImgWidth, const int distImgHeight,
+    const RGBSpectrum *downsampledImg, const Point2i &downsampledImgResolution,
     const Point2i &fullResolution, const std::vector<uint32_t> &treeletMapping)
-    : BasePartitionedInfiniteAreaLight(LightToWorld, power, nSamples, distImg,
-                                       distImgWidth, distImgHeight),
+    : BasePartitionedInfiniteAreaLight(LightToWorld, power, nSamples,
+                                       downsampledImg,
+                                       downsampledImgResolution),
       pImageHelper(fullResolution, treeletMapping.size(), ImageWrap::Repeat,
                    treeletMapping) {}
 
@@ -173,10 +230,11 @@ std::pair<uint32_t, uint32_t> CloudInfiniteAreaLight::GetPointImageInfo(
 
 PartitionedInfiniteAreaLight::PartitionedInfiniteAreaLight(
     const Transform &LightToWorld, const Spectrum &power, int nSamples,
-    PartitionedImage &&Lmap, const Float *distImg, const int distImgWidth,
-    const int distImgHeight)
-    : BasePartitionedInfiniteAreaLight(LightToWorld, power, nSamples, distImg,
-                                       distImgWidth, distImgHeight),
+    PartitionedImage &&Lmap, const RGBSpectrum *downsampledImg,
+    const Point2i &downsampledImgResolution)
+    : BasePartitionedInfiniteAreaLight(LightToWorld, power, nSamples,
+                                       downsampledImg,
+                                       downsampledImgResolution),
       Lmap(std::move(Lmap)) {}
 
 std::shared_ptr<PartitionedInfiniteAreaLight> CreatePartitionedInfiniteLight(
