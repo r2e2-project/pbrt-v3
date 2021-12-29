@@ -250,6 +250,13 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
         if (lightRay) output.rays[2] = move(lightRay);
 
         return;
+    } else if (r.needsImageSampling) {
+        auto p = global::manager.getInMemoryImagePartition(
+            r.imageSampleInfo.imageId);
+        auto Li = p.Lookup(r.imageSampleInfo.uv);
+        r.Ld *= Li;
+        output.sample = move(rayStatePtr);
+        return;
     } else {
         throw runtime_error("ProcessRay: invalid ray");
     }
@@ -259,6 +266,12 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
     auto &ray = *tracedRay;
     const bool hit = ray.HasHit();
     const bool emptyVisit = ray.toVisitEmpty();
+
+    if (emptyVisit && !hit && ray.needsImageSampling) {
+        // we should send the ray for image sampling
+        output.rays[0] = move(tracedRay);
+        return;
+    }
 
     if (ray.IsShadowRay()) {
         if (hit or emptyVisit) {
@@ -287,7 +300,23 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
                                  -ray.lightRayInfo.sampledDirection);
                 }
             } else {
-                Li = sceneBase.fakeScene->lights[sLight - 1]->Le(ray.ray);
+                auto &l = sceneBase.fakeScene->lights[sLight - 1];
+                if (l->GetType() != LightType::PartitionedInfinite) {
+                    Li = l->Le(ray.ray);
+                } else {
+                    bool isBlack = false;
+                    auto pLight =
+                        dynamic_cast<CloudInfiniteAreaLight *>(l.get());
+                    auto uv = pLight->Le_SampledPoint(ray.ray);
+                    auto img = pLight->GetPointImageInfo(uv, isBlack);
+                    if (!isBlack) {
+                        ray.needsImageSampling = true;
+                        ray.imageSampleInfo.uv = uv;
+                        ray.imageSampleInfo.treelet = img.first;
+                        ray.imageSampleInfo.imageId = img.second;
+                        output.rays[0] = move(tracedRay);
+                    }
+                }
             }
 
             if (!Li.IsBlack()) {

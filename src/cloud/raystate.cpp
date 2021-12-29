@@ -48,10 +48,12 @@ void RayState::StartTrace() {
 }
 
 uint32_t RayState::CurrentTreelet() const {
-    if (!toVisitEmpty()) {
+    if (!toVisitEmpty()) {  // needs tracing
         return toVisitTop().treelet;
-    } else if (hit) {
+    } else if (hit) {  // needs shading
         return hitInfo.material.treelet;
+    } else if (needsImageSampling) { // needs image sampling
+        return imageSampleInfo.treelet;
     }
 
     return 0;
