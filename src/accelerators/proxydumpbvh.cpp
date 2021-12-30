@@ -1,15 +1,16 @@
 #include "proxydumpbvh.h"
-#include "accelerators/cloud.h"
-#include "paramset.h"
-#include "stats.h"
+
 #include <algorithm>
+#include <chrono>
 #include <fstream>
+#include <iomanip>
 #include <type_traits>
 
+#include "accelerators/cloud.h"
 #include "messages/utils.h"
+#include "paramset.h"
 #include "pbrt.pb.h"
-#include <iomanip>
-#include <chrono>
+#include "stats.h"
 using namespace std;
 
 namespace pbrt {
@@ -17,44 +18,42 @@ namespace pbrt {
 STAT_COUNTER("BVH/Total Ray Transfers", totalRayTransfers);
 
 namespace SizeEstimates {
-    constexpr uint64_t nodeSize = sizeof(CloudBVH::TreeletNode);
-    // triNum, faceIndex, pointer to mesh, 3 indices for triangle
-    // assume on average 2 unique vertices, normals etc per triangle
-    constexpr uint64_t triSize = sizeof(int) + sizeof(int) + sizeof(uintptr_t) + 
-        3 * sizeof(int) + 2 * (sizeof(Point3f) + sizeof(Normal3f) +
-        sizeof(Vector3f) + sizeof(Point2f));
-    constexpr uint64_t instSize = 32 * sizeof(float) + sizeof(int);
-}
+constexpr uint64_t nodeSize = sizeof(CloudBVH::TreeletNode);
+// triNum, faceIndex, pointer to mesh, 3 indices for triangle
+// assume on average 2 unique vertices, normals etc per triangle
+constexpr uint64_t triSize = sizeof(int) + sizeof(int) + sizeof(uintptr_t) +
+                             3 * sizeof(int) +
+                             2 * (sizeof(Point3f) + sizeof(Normal3f) +
+                                  sizeof(Vector3f) + sizeof(Point2f));
+constexpr uint64_t instSize = 32 * sizeof(float) + sizeof(int);
+}  // namespace SizeEstimates
 
 ProxyDumpBVH::ProxyDumpBVH(vector<shared_ptr<Primitive>> &&p,
-                               int maxTreeletBytes,
-                               int copyableThreshold,
-                               bool writeHeader,
-                               bool inlineProxies,
-                               ProxyDumpBVH::TraversalAlgorithm travAlgo,
-                               ProxyDumpBVH::PartitionAlgorithm partAlgo,
-                               int maxPrimsInNode,
-                               SplitMethod splitMethod)
-        : BVHAccel(p, maxPrimsInNode, splitMethod),
-          traversalAlgo(travAlgo),
-          partitionAlgo(partAlgo)
-{
+                           int maxTreeletBytes, int copyableThreshold,
+                           bool writeHeader, bool inlineProxies,
+                           ProxyDumpBVH::TraversalAlgorithm travAlgo,
+                           ProxyDumpBVH::PartitionAlgorithm partAlgo,
+                           int maxPrimsInNode, SplitMethod splitMethod)
+    : BVHAccel(p, maxPrimsInNode, splitMethod),
+      traversalAlgo(travAlgo),
+      partitionAlgo(partAlgo) {
     SetNodeInfo(maxTreeletBytes, copyableThreshold);
     allTreelets = AllocateTreelets(maxTreeletBytes);
 
     if (writeHeader) {
         DumpHeader();
     }
-    
+
     if (PbrtOptions.dumpScene) {
         DumpTreelets(true, inlineProxies);
     }
 }
 
-shared_ptr<ProxyDumpBVH> CreateProxyDumpBVH(
-    vector<shared_ptr<Primitive>> prims, const ParamSet &ps) {
+shared_ptr<ProxyDumpBVH> CreateProxyDumpBVH(vector<shared_ptr<Primitive>> prims,
+                                            const ParamSet &ps) {
     int maxTreeletBytes = ps.FindOneInt("maxtreeletbytes", 1'000'000'000);
-    int copyableThreshold = ps.FindOneInt("copyablethreshold", maxTreeletBytes / 2);
+    int copyableThreshold =
+        ps.FindOneInt("copyablethreshold", maxTreeletBytes / 2);
 
     string travAlgoName = ps.FindOneString("traversal", "sendcheck");
     ProxyDumpBVH::TraversalAlgorithm travAlgo;
@@ -76,8 +75,9 @@ shared_ptr<ProxyDumpBVH> CreateProxyDumpBVH(
     else if (partAlgoName == "nvidia")
         partAlgo = ProxyDumpBVH::PartitionAlgorithm::Nvidia;
     else {
-        Warning("BVH partition algorithm \"%s\" unknown. Using \"Topological\".",
-                partAlgoName.c_str());
+        Warning(
+            "BVH partition algorithm \"%s\" unknown. Using \"Topological\".",
+            partAlgoName.c_str());
     }
 
     bool writeHeader = ps.FindOneBool("writeheader", false);
@@ -105,11 +105,9 @@ shared_ptr<ProxyDumpBVH> CreateProxyDumpBVH(
         maxPrimsInNode = 1;
     }
 
-    return make_shared<ProxyDumpBVH>(move(prims), maxTreeletBytes,
-                                     copyableThreshold,
-                                     writeHeader, inlineProxies,
-                                     travAlgo, partAlgo,
-                                     maxPrimsInNode, splitMethod);
+    return make_shared<ProxyDumpBVH>(
+        move(prims), maxTreeletBytes, copyableThreshold, writeHeader,
+        inlineProxies, travAlgo, partAlgo, maxPrimsInNode, splitMethod);
 }
 
 void ProxyDumpBVH::SetNodeInfo(int maxTreeletBytes, int copyableThreshold) {
@@ -134,14 +132,16 @@ void ProxyDumpBVH::SetNodeInfo(int maxTreeletBytes, int copyableThreshold) {
         unordered_set<const ProxyBVH *> includedProxies;
 
         for (int primIdx = 0; primIdx < node.nPrimitives; primIdx++) {
-            auto &prim  = primitives[node.primitivesOffset + primIdx];
+            auto &prim = primitives[node.primitivesOffset + primIdx];
             if (prim->GetType() == PrimitiveType::Geometric) {
                 totalSize += SizeEstimates::triSize;
             } else if (prim->GetType() == PrimitiveType::Transformed) {
                 totalSize += SizeEstimates::instSize;
 
-                shared_ptr<TransformedPrimitive> tp = dynamic_pointer_cast<TransformedPrimitive>(prim);
-                shared_ptr<ProxyBVH> proxy = dynamic_pointer_cast<ProxyBVH>(tp->GetPrimitive());
+                shared_ptr<TransformedPrimitive> tp =
+                    dynamic_pointer_cast<TransformedPrimitive>(prim);
+                shared_ptr<ProxyBVH> proxy =
+                    dynamic_pointer_cast<ProxyBVH>(tp->GetPrimitive());
                 CHECK_NOTNULL(proxy.get());
 
                 auto processDep = [&](const ProxyBVH *proxy) {
@@ -182,12 +182,14 @@ void ProxyDumpBVH::SetNodeInfo(int maxTreeletBytes, int copyableThreshold) {
     }
 
     // Specific to NVIDIA algorithm
-    const float AREA_EPSILON = nodes[0].bounds.SurfaceArea() * maxTreeletBytes / (totalNodeBytes * 10);
+    const float AREA_EPSILON =
+        nodes[0].bounds.SurfaceArea() * maxTreeletBytes / (totalNodeBytes * 10);
 
     for (uint64_t nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
         const LinearBVHNode &node = nodes[nodeIdx];
 
-        nodeBounds[nodeIdx] = nodes[nodeIdx].bounds.SurfaceArea() + AREA_EPSILON;
+        nodeBounds[nodeIdx] =
+            nodes[nodeIdx].bounds.SurfaceArea() + AREA_EPSILON;
     }
 
     uint32_t proxyIdx = 0;
@@ -211,9 +213,10 @@ void ProxyDumpBVH::SetNodeInfo(int maxTreeletBytes, int copyableThreshold) {
         subtreeSizes[nodeIdx] = nodeSizes[nodeIdx];
         subtreeProxies[nodeIdx] = nodeProxies[nodeIdx];
         if (node.nPrimitives == 0) {
-            subtreeProxies[nodeIdx] = ProxyUnion(subtreeProxies[nodeIdx + 1],
-                                                 subtreeProxies[node.secondChildOffset]);
-            
+            subtreeProxies[nodeIdx] =
+                ProxyUnion(subtreeProxies[nodeIdx + 1],
+                           subtreeProxies[node.secondChildOffset]);
+
             subtreeSizes[nodeIdx] += subtreeSizes[nodeIdx + 1] +
                                      subtreeSizes[node.secondChildOffset];
         }
@@ -238,13 +241,14 @@ uint64_t ProxyDumpBVH::GetProxyBytes(ProxySetPtr proxies) const {
         totalProxiesSize += proxy->Size();
     }
 
-    const_cast<unordered_map<ProxySetPtr, uint64_t> *>(&proxySizeCache)->emplace(proxies, totalProxiesSize);
+    const_cast<unordered_map<ProxySetPtr, uint64_t> *>(&proxySizeCache)
+        ->emplace(proxies, totalProxiesSize);
 
     return totalProxiesSize;
 }
 
-ProxyDumpBVH::ProxySetPtr ProxyDumpBVH::ProxyUnion(ProxyDumpBVH::ProxySetPtr a,
-                                                   ProxyDumpBVH::ProxySetPtr b) const {
+ProxyDumpBVH::ProxySetPtr ProxyDumpBVH::ProxyUnion(
+    ProxyDumpBVH::ProxySetPtr a, ProxyDumpBVH::ProxySetPtr b) const {
     if (a == b) {
         return a;
     }
@@ -263,7 +267,9 @@ ProxyDumpBVH::ProxySetPtr ProxyDumpBVH::ProxyUnion(ProxyDumpBVH::ProxySetPtr a,
         setUnion.emplace(ptr);
     }
 
-    auto kv = const_cast<unordered_set<unordered_set<const ProxyBVH *>> *>(&proxySets)->emplace(move(setUnion));
+    auto kv =
+        const_cast<unordered_set<unordered_set<const ProxyBVH *>> *>(&proxySets)
+            ->emplace(move(setUnion));
     return &*kv.first;
 }
 
@@ -273,24 +279,29 @@ ProxyDumpBVH::TreeletInfo::TreeletInfo(IntermediateTreeletInfo &&info)
       noProxySize(info.noProxySize),
       proxySize(info.proxySize + info.unsharedProxySize),
       dirIdx(info.dirIdx),
-      totalProb(info.totalProb)
-{
+      totalProb(info.totalProb) {
     proxies.insert(proxies.end(), info.proxies->begin(), info.proxies->end());
-    proxies.insert(proxies.end(), info.unsharedProxies.begin(), info.unsharedProxies.end());
+    proxies.insert(proxies.end(), info.unsharedProxies.begin(),
+                   info.unsharedProxies.end());
 }
 
-unordered_map<uint32_t, ProxyDumpBVH::IntermediateTreeletInfo> ProxyDumpBVH::MergeDisjointTreelets(int dirIdx, int maxTreeletBytes, const TraversalGraph &graph) {
+unordered_map<uint32_t, ProxyDumpBVH::IntermediateTreeletInfo>
+ProxyDumpBVH::MergeDisjointTreelets(int dirIdx, int maxTreeletBytes,
+                                    const TraversalGraph &graph) {
     unordered_map<uint32_t, IntermediateTreeletInfo> treelets;
     for (uint64_t nodeIdx = 0; nodeIdx < nodeCount; nodeIdx++) {
         uint32_t curTreelet = treeletAllocations[dirIdx][nodeIdx];
         IntermediateTreeletInfo &treelet = treelets[curTreelet];
         treelet.proxies = ProxyUnion(treelet.proxies, nodeProxies[nodeIdx]);
-        treelet.unsharedProxies.insert(treelet.unsharedProxies.end(), nodeUnsharedProxies[nodeIdx].begin(),
+        treelet.unsharedProxies.insert(treelet.unsharedProxies.end(),
+                                       nodeUnsharedProxies[nodeIdx].begin(),
                                        nodeUnsharedProxies[nodeIdx].end());
         treelet.dirIdx = dirIdx;
         treelet.nodes.push_back(nodeIdx);
-        // Don't want to count unshared proxies as raw node sizes, will double count
-        treelet.noProxySize += nodeSizes[nodeIdx] - nodeUnsharedProxySizes[nodeIdx];
+        // Don't want to count unshared proxies as raw node sizes, will double
+        // count
+        treelet.noProxySize +=
+            nodeSizes[nodeIdx] - nodeUnsharedProxySizes[nodeIdx];
         treelet.unsharedProxySize += nodeUnsharedProxySizes[nodeIdx];
 
         auto outgoingBounds = graph.outgoing[nodeIdx];
@@ -311,7 +322,8 @@ unordered_map<uint32_t, ProxyDumpBVH::IntermediateTreeletInfo> ProxyDumpBVH::Mer
         }
     }
 
-    IntermediateTreeletInfo &rootTreelet = treelets.at(treeletAllocations[dirIdx][0]);
+    IntermediateTreeletInfo &rootTreelet =
+        treelets.at(treeletAllocations[dirIdx][0]);
     rootTreelet.totalProb += 1.0;
 
     struct TreeletSortKey {
@@ -319,12 +331,12 @@ unordered_map<uint32_t, ProxyDumpBVH::IntermediateTreeletInfo> ProxyDumpBVH::Mer
         uint64_t treeletSize;
 
         TreeletSortKey(uint32_t treeletID, uint64_t treeletSize)
-            : treeletID(treeletID), treeletSize(treeletSize)
-        {}
+            : treeletID(treeletID), treeletSize(treeletSize) {}
     };
 
     struct TreeletCmp {
-        bool operator()(const TreeletSortKey &a, const TreeletSortKey &b) const {
+        bool operator()(const TreeletSortKey &a,
+                        const TreeletSortKey &b) const {
             if (a.treeletSize < b.treeletSize) {
                 return true;
             }
@@ -340,10 +352,15 @@ unordered_map<uint32_t, ProxyDumpBVH::IntermediateTreeletInfo> ProxyDumpBVH::Mer
     map<TreeletSortKey, IntermediateTreeletInfo, TreeletCmp> sortedTreelets;
     for (auto &kv : treelets) {
         CHECK_NE(kv.first, 0);
-        CHECK_LE(kv.second.noProxySize + kv.second.proxySize + kv.second.unsharedProxySize, maxTreeletBytes);
-        sortedTreelets.emplace(piecewise_construct,
-                forward_as_tuple(kv.first, kv.second.noProxySize + kv.second.proxySize + kv.second.unsharedProxySize),
-                forward_as_tuple(move(kv.second)));
+        CHECK_LE(kv.second.noProxySize + kv.second.proxySize +
+                     kv.second.unsharedProxySize,
+                 maxTreeletBytes);
+        sortedTreelets.emplace(
+            piecewise_construct,
+            forward_as_tuple(kv.first, kv.second.noProxySize +
+                                           kv.second.proxySize +
+                                           kv.second.unsharedProxySize),
+            forward_as_tuple(move(kv.second)));
     }
 
     // Merge treelets together
@@ -364,21 +381,27 @@ unordered_map<uint32_t, ProxyDumpBVH::IntermediateTreeletInfo> ProxyDumpBVH::Mer
                 continue;
             }
 
-            ProxySetPtr mergedProxies = ProxyUnion(info.proxies, candidateInfo.proxies);
+            ProxySetPtr mergedProxies =
+                ProxyUnion(info.proxies, candidateInfo.proxies);
             uint64_t mergedProxySize = GetProxyBytes(mergedProxies);
-            uint64_t mergedUnsharedProxySize = info.unsharedProxySize +
-                candidateInfo.unsharedProxySize;
+            uint64_t mergedUnsharedProxySize =
+                info.unsharedProxySize + candidateInfo.unsharedProxySize;
 
-            uint64_t totalSize = noProxySize + mergedProxySize + mergedUnsharedProxySize;
+            uint64_t totalSize =
+                noProxySize + mergedProxySize + mergedUnsharedProxySize;
             if (totalSize <= maxTreeletBytes) {
                 if (info.nodes.front() < candidateInfo.nodes.front()) {
-                    info.nodes.splice(info.nodes.end(), move(candidateInfo.nodes));
+                    info.nodes.splice(info.nodes.end(),
+                                      move(candidateInfo.nodes));
                 } else {
-                    candidateInfo.nodes.splice(candidateInfo.nodes.end(), move(info.nodes));
+                    candidateInfo.nodes.splice(candidateInfo.nodes.end(),
+                                               move(info.nodes));
                     info.nodes = move(candidateInfo.nodes);
                 }
                 info.proxies = mergedProxies;
-                info.unsharedProxies.splice(info.unsharedProxies.end(), move(candidateInfo.unsharedProxies));
+                info.unsharedProxies.splice(
+                    info.unsharedProxies.end(),
+                    move(candidateInfo.unsharedProxies));
                 info.noProxySize = noProxySize;
                 info.proxySize = mergedProxySize;
                 info.unsharedProxySize = mergedUnsharedProxySize;
@@ -406,7 +429,8 @@ unordered_map<uint32_t, ProxyDumpBVH::IntermediateTreeletInfo> ProxyDumpBVH::Mer
     return mergedTreelets;
 }
 
-void ProxyDumpBVH::OrderTreeletNodesDepthFirst(int numDirs, vector<TreeletInfo> &treelets) {
+void ProxyDumpBVH::OrderTreeletNodesDepthFirst(int numDirs,
+                                               vector<TreeletInfo> &treelets) {
     // Reorder nodes to be depth first (left then right) for serialization
     for (uint32_t treeletID = 0; treeletID < treelets.size(); treeletID++) {
         TreeletInfo &treelet = treelets[treeletID];
@@ -435,14 +459,16 @@ void ProxyDumpBVH::OrderTreeletNodesDepthFirst(int numDirs, vector<TreeletInfo> 
                 info.nodes.push_back(nodeIdx);
                 const LinearBVHNode &node = nodes[nodeIdx];
                 if (node.nPrimitives == 0) {
-                    uint32_t rightTreeletID = treeletAllocations[dirIdx][node.secondChildOffset];
+                    uint32_t rightTreeletID =
+                        treeletAllocations[dirIdx][node.secondChildOffset];
                     if (rightTreeletID == treeletID) {
                         depthFirstInTreelet.push(node.secondChildOffset);
                     } else {
                         depthFirst.push(node.secondChildOffset);
                     }
 
-                    uint32_t leftTreeletID = treeletAllocations[dirIdx][nodeIdx + 1];
+                    uint32_t leftTreeletID =
+                        treeletAllocations[dirIdx][nodeIdx + 1];
                     if (leftTreeletID == treeletID) {
                         depthFirstInTreelet.push(nodeIdx + 1);
                     } else {
@@ -454,7 +480,8 @@ void ProxyDumpBVH::OrderTreeletNodesDepthFirst(int numDirs, vector<TreeletInfo> 
     }
 }
 
-vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateUnspecializedTreelets(int maxTreeletBytes) {
+vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateUnspecializedTreelets(
+    int maxTreeletBytes) {
     TraversalGraph graph;
     graph.outgoing.resize(nodeCount);
     graph.incomingProb.resize(nodeCount);
@@ -472,7 +499,8 @@ vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateUnspecializedTreelets(in
                 graph.incomingProb[nodeIdx] += g.incomingProb[nodeIdx];
 
                 const auto bounds = g.outgoing[nodeIdx];
-                for (Edge *edge = bounds.first; edge < bounds.first + bounds.second; edge++) {
+                for (Edge *edge = bounds.first;
+                     edge < bounds.first + bounds.second; edge++) {
                     mergedEdges[edge->src][edge->dst] += edge->weight;
                     mergedEdges[edge->dst][edge->src] += edge->weight;
                 }
@@ -490,15 +518,18 @@ vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateUnspecializedTreelets(in
             for (auto &kv : outgoing) {
                 graph.edges.emplace_back(nodeIdx, kv.first, kv.second);
             }
-            graph.outgoing[nodeIdx] = make_pair(graph.edges.data() + start, outgoing.size());
+            graph.outgoing[nodeIdx] =
+                make_pair(graph.edges.data() + start, outgoing.size());
         }
     }
 
     treeletAllocations[0] = ComputeTreelets(graph, maxTreeletBytes);
-    auto intermediateTreelets = MergeDisjointTreelets(0, maxTreeletBytes, graph);
+    auto intermediateTreelets =
+        MergeDisjointTreelets(0, maxTreeletBytes, graph);
 
     vector<TreeletInfo> finalTreelets;
-    for (auto iter = intermediateTreelets.begin(); iter != intermediateTreelets.end(); iter++) {
+    for (auto iter = intermediateTreelets.begin();
+         iter != intermediateTreelets.end(); iter++) {
         IntermediateTreeletInfo &info = iter->second;
         if (info.nodes.front() == 0) {
             finalTreelets.emplace_back(move(info));
@@ -509,7 +540,8 @@ vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateUnspecializedTreelets(in
 
     CHECK_EQ(finalTreelets.size(), 1);
 
-    for (auto iter = intermediateTreelets.begin(); iter != intermediateTreelets.end(); iter++) {
+    for (auto iter = intermediateTreelets.begin();
+         iter != intermediateTreelets.end(); iter++) {
         finalTreelets.emplace_back(move(iter->second));
     }
 
@@ -531,7 +563,8 @@ vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateUnspecializedTreelets(in
     uint64_t totalBytes = 0;
     for (int i = 0; i < finalTreelets.size(); i++) {
         const auto &treelet = finalTreelets[i];
-        cout << "Treelet " << i << ": " << treelet.noProxySize + treelet.proxySize << endl;
+        cout << "Treelet " << i << ": "
+             << treelet.noProxySize + treelet.proxySize << endl;
         totalBytes += treelet.noProxySize + treelet.proxySize;
     }
     cout << "Total bytes: " << totalBytes << endl;
@@ -539,35 +572,39 @@ vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateUnspecializedTreelets(in
     return finalTreelets;
 }
 
-vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateDirectionalTreelets(int maxTreeletBytes) {
-    array<unordered_map<uint32_t, IntermediateTreeletInfo>, 8> intermediateTreelets;
+vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateDirectionalTreelets(
+    int maxTreeletBytes) {
+    array<unordered_map<uint32_t, IntermediateTreeletInfo>, 8>
+        intermediateTreelets;
 
     for (int dirIdx = 0; dirIdx < 8; dirIdx++) {
         Vector3f dir = ComputeRayDir(dirIdx);
         TraversalGraph graph = CreateTraversalGraph(dir, 0);
 
-        //rayCounts[i].resize(nodeCount);
+        // rayCounts[i].resize(nodeCount);
         //// Init rayCounts so unordered_map isn't modified during intersection
-        //for (uint64_t srcIdx = 0; srcIdx < nodeCount; srcIdx++) {
-        //    auto outgoing = graph.outgoing[srcIdx];
-        //    for (const Edge *outgoingEdge = outgoing.first;
-        //         outgoingEdge < outgoing.first + outgoing.second;
-        //         outgoingEdge++) {
-        //        uint64_t dstIdx = outgoingEdge->dst;
-        //        auto res = rayCounts[i][srcIdx].emplace(dstIdx, 0);
-        //        CHECK_EQ(res.second, true);
-        //    }
-        //}
+        // for (uint64_t srcIdx = 0; srcIdx < nodeCount; srcIdx++) {
+        //     auto outgoing = graph.outgoing[srcIdx];
+        //     for (const Edge *outgoingEdge = outgoing.first;
+        //          outgoingEdge < outgoing.first + outgoing.second;
+        //          outgoingEdge++) {
+        //         uint64_t dstIdx = outgoingEdge->dst;
+        //         auto res = rayCounts[i][srcIdx].emplace(dstIdx, 0);
+        //         CHECK_EQ(res.second, true);
+        //     }
+        // }
 
         treeletAllocations[dirIdx] = ComputeTreelets(graph, maxTreeletBytes);
-        intermediateTreelets[dirIdx] = MergeDisjointTreelets(dirIdx, maxTreeletBytes, graph);
+        intermediateTreelets[dirIdx] =
+            MergeDisjointTreelets(dirIdx, maxTreeletBytes, graph);
     }
 
     vector<TreeletInfo> finalTreelets;
     // Assign root treelets to IDs 0 to 8
     for (int dirIdx = 0; dirIdx < 8; dirIdx++) {
         // Search for treelet that holds node 0
-        for (auto iter = intermediateTreelets[dirIdx].begin(); iter != intermediateTreelets[dirIdx].end(); iter++) {
+        for (auto iter = intermediateTreelets[dirIdx].begin();
+             iter != intermediateTreelets[dirIdx].end(); iter++) {
             IntermediateTreeletInfo &info = iter->second;
             if (info.nodes.front() == 0) {
                 finalTreelets.push_back(move(info));
@@ -609,7 +646,8 @@ vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateDirectionalTreelets(int 
     return finalTreelets;
 }
 
-vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateTreelets(int maxTreeletBytes) {
+vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateTreelets(
+    int maxTreeletBytes) {
     if (partitionAlgo == PartitionAlgorithm::MergedGraph ||
         partitionAlgo == PartitionAlgorithm::Nvidia) {
         return AllocateUnspecializedTreelets(maxTreeletBytes);
@@ -619,19 +657,20 @@ vector<ProxyDumpBVH::TreeletInfo> ProxyDumpBVH::AllocateTreelets(int maxTreeletB
 }
 
 ProxyDumpBVH::IntermediateTraversalGraph
-ProxyDumpBVH::CreateTraversalGraphSendCheck(const Vector3f &rayDir, int depthReduction) const {
+ProxyDumpBVH::CreateTraversalGraphSendCheck(const Vector3f &rayDir,
+                                            int depthReduction) const {
     (void)depthReduction;
     IntermediateTraversalGraph g;
     g.depthFirst.reserve(nodeCount);
     g.outgoing.resize(nodeCount);
     g.incomingProb.resize(nodeCount);
 
-    bool dirIsNeg[3] = { rayDir.x < 0, rayDir.y < 0, rayDir.z < 0 };
+    bool dirIsNeg[3] = {rayDir.x < 0, rayDir.y < 0, rayDir.z < 0};
 
     auto addEdge = [this, &g](auto src, auto dst, auto prob) {
         g.edges.emplace_back(src, dst, prob);
 
-        if (g.outgoing[src].second == 0) { // No outgoing yet
+        if (g.outgoing[src].second == 0) {  // No outgoing yet
             g.outgoing[src].first = g.edges.size() - 1;
         }
         g.outgoing[src].second++;
@@ -639,7 +678,7 @@ ProxyDumpBVH::CreateTraversalGraphSendCheck(const Vector3f &rayDir, int depthRed
         g.incomingProb[dst] += prob;
     };
 
-    vector<uint64_t> traversalStack {0};
+    vector<uint64_t> traversalStack{0};
     traversalStack.reserve(64);
 
     g.incomingProb[0] = 1.0;
@@ -651,7 +690,7 @@ ProxyDumpBVH::CreateTraversalGraphSendCheck(const Vector3f &rayDir, int depthRed
         LinearBVHNode *node = &nodes[curIdx];
         float curProb = g.incomingProb[curIdx];
         CHECK_GT(curProb, 0.0);
-        CHECK_LE(curProb, 1.0001); // FP error (should be 1.0)
+        CHECK_LE(curProb, 1.0001);  // FP error (should be 1.0)
 
         uint64_t nextHit = 0, nextMiss = 0;
         if (traversalStack.size() > 0) {
@@ -672,7 +711,7 @@ ProxyDumpBVH::CreateTraversalGraphSendCheck(const Vector3f &rayDir, int depthRed
 
             if (nextMiss == 0) {
                 // Guaranteed move down in the BVH
-                CHECK_GT(curProb, 0.99); // FP error (should be 1.0)
+                CHECK_GT(curProb, 0.99);  // FP error (should be 1.0)
                 addEdge(curIdx, nextHit, curProb);
             } else {
                 LinearBVHNode *nextMissNode = &nodes[nextMiss];
@@ -698,10 +737,13 @@ ProxyDumpBVH::CreateTraversalGraphSendCheck(const Vector3f &rayDir, int depthRed
             // nextMiss should still receive the incomingProb since the instance
             // edges are never represented in the graph.
             bool skipEdge = false;
-            auto &lastPrim = primitives[node->primitivesOffset + node->nPrimitives - 1];
+            auto &lastPrim =
+                primitives[node->primitivesOffset + node->nPrimitives - 1];
             if (lastPrim->GetType() == PrimitiveType::Transformed) {
-                shared_ptr<TransformedPrimitive> tp = dynamic_pointer_cast<TransformedPrimitive>(lastPrim);
-                shared_ptr<ProxyBVH> proxy = dynamic_pointer_cast<ProxyBVH>(tp->GetPrimitive());
+                shared_ptr<TransformedPrimitive> tp =
+                    dynamic_pointer_cast<TransformedPrimitive>(lastPrim);
+                shared_ptr<ProxyBVH> proxy =
+                    dynamic_pointer_cast<ProxyBVH>(tp->GetPrimitive());
                 CHECK_NOTNULL(proxy.get());
                 if (largeProxies.count(proxy.get())) {
                     skipEdge = true;
@@ -725,20 +767,21 @@ ProxyDumpBVH::CreateTraversalGraphSendCheck(const Vector3f &rayDir, int depthRed
 }
 
 ProxyDumpBVH::IntermediateTraversalGraph
-ProxyDumpBVH::CreateTraversalGraphCheckSend(const Vector3f &rayDir, int depthReduction) const {
+ProxyDumpBVH::CreateTraversalGraphCheckSend(const Vector3f &rayDir,
+                                            int depthReduction) const {
     (void)depthReduction;
     IntermediateTraversalGraph g;
     g.depthFirst.reserve(nodeCount);
     g.outgoing.resize(nodeCount);
     g.incomingProb.resize(nodeCount);
 
-    bool dirIsNeg[3] = { rayDir.x < 0, rayDir.y < 0, rayDir.z < 0 };
+    bool dirIsNeg[3] = {rayDir.x < 0, rayDir.y < 0, rayDir.z < 0};
 
     // FIXME this should just be a graph method
     auto addEdge = [this, &g](auto src, auto dst, auto prob) {
         g.edges.emplace_back(src, dst, prob);
 
-        if (g.outgoing[src].second == 0) { // No outgoing yet
+        if (g.outgoing[src].second == 0) {  // No outgoing yet
             g.outgoing[src].first = g.edges.size() - 1;
         }
         g.outgoing[src].second++;
@@ -746,7 +789,7 @@ ProxyDumpBVH::CreateTraversalGraphCheckSend(const Vector3f &rayDir, int depthRed
         g.incomingProb[dst] += prob;
     };
 
-    vector<uint64_t> traversalStack {0};
+    vector<uint64_t> traversalStack{0};
     traversalStack.reserve(64);
 
     g.incomingProb[0] = 1.0;
@@ -758,7 +801,7 @@ ProxyDumpBVH::CreateTraversalGraphCheckSend(const Vector3f &rayDir, int depthRed
         LinearBVHNode *node = &nodes[curIdx];
         float curProb = g.incomingProb[curIdx];
         CHECK_GE(curProb, 0.0);
-        CHECK_LE(curProb, 1.0001); // FP error (should be 1.0)
+        CHECK_LE(curProb, 1.0001);  // FP error (should be 1.0)
 
         if (node->nPrimitives == 0) {
             if (dirIsNeg[node->axis]) {
@@ -773,10 +816,13 @@ ProxyDumpBVH::CreateTraversalGraphCheckSend(const Vector3f &rayDir, int depthRed
         // refer to SendCheck for explanation
         bool skipEdge = false;
         if (node->nPrimitives > 0) {
-            auto &lastPrim = primitives[node->primitivesOffset + node->nPrimitives - 1];
+            auto &lastPrim =
+                primitives[node->primitivesOffset + node->nPrimitives - 1];
             if (lastPrim->GetType() == PrimitiveType::Transformed) {
-                shared_ptr<TransformedPrimitive> tp = dynamic_pointer_cast<TransformedPrimitive>(lastPrim);
-                shared_ptr<ProxyBVH> proxy = dynamic_pointer_cast<ProxyBVH>(tp->GetPrimitive());
+                shared_ptr<TransformedPrimitive> tp =
+                    dynamic_pointer_cast<TransformedPrimitive>(lastPrim);
+                shared_ptr<ProxyBVH> proxy =
+                    dynamic_pointer_cast<ProxyBVH>(tp->GetPrimitive());
                 if (largeProxies.count(proxy.get())) {
                     skipEdge = true;
                 }
@@ -788,7 +834,7 @@ ProxyDumpBVH::CreateTraversalGraphCheckSend(const Vector3f &rayDir, int depthRed
             uint64_t nextNode = traversalStack[i];
             LinearBVHNode *nextHitNode = &nodes[nextNode];
             LinearBVHNode *parentHitNode = &nodes[nodeParents[nextNode]];
-            
+
             // FIXME ask Pat about this
             float nextSA = nextHitNode->bounds.SurfaceArea();
             float parentSA = parentHitNode->bounds.SurfaceArea();
@@ -814,20 +860,20 @@ ProxyDumpBVH::CreateTraversalGraphCheckSend(const Vector3f &rayDir, int depthRed
     return g;
 }
 
-ProxyDumpBVH::TraversalGraph
-ProxyDumpBVH::CreateTraversalGraph(const Vector3f &rayDir, int depthReduction) const {
+ProxyDumpBVH::TraversalGraph ProxyDumpBVH::CreateTraversalGraph(
+    const Vector3f &rayDir, int depthReduction) const {
     cout << "Starting graph gen\n";
     IntermediateTraversalGraph intermediate;
 
-    //FIXME fix probabilities here on up edges
+    // FIXME fix probabilities here on up edges
 
     switch (traversalAlgo) {
-        case TraversalAlgorithm::SendCheck:
-            intermediate = CreateTraversalGraphSendCheck(rayDir, depthReduction);
-            break;
-        case TraversalAlgorithm::CheckSend:
-            intermediate = CreateTraversalGraphCheckSend(rayDir, depthReduction);
-            break;
+    case TraversalAlgorithm::SendCheck:
+        intermediate = CreateTraversalGraphSendCheck(rayDir, depthReduction);
+        break;
+    case TraversalAlgorithm::CheckSend:
+        intermediate = CreateTraversalGraphCheckSend(rayDir, depthReduction);
+        break;
     }
     cout << "Intermediate finished\n";
 
@@ -852,23 +898,19 @@ ProxyDumpBVH::CreateTraversalGraph(const Vector3f &rayDir, int depthReduction) c
         intermediate.outgoing.pop_front();
     }
 
-    printf("Graph gen complete: %lu verts %lu edges\n",
-           graph.depthFirst.size(), graph.edges.size());
+    printf("Graph gen complete: %lu verts %lu edges\n", graph.depthFirst.size(),
+           graph.edges.size());
 
     return graph;
 }
 
-vector<uint32_t>
-ProxyDumpBVH::ComputeTreeletsTopological(const TraversalGraph &graph,
-                                           uint64_t maxTreeletBytes) const {
+vector<uint32_t> ProxyDumpBVH::ComputeTreeletsTopological(
+    const TraversalGraph &graph, uint64_t maxTreeletBytes) const {
     struct OutEdge {
         float weight;
         uint64_t dst;
 
-        OutEdge(const Edge &edge)
-            : weight(edge.weight),
-              dst(edge.dst)
-        {}
+        OutEdge(const Edge &edge) : weight(edge.weight), dst(edge.dst) {}
     };
 
     struct EdgeCmp {
@@ -903,7 +945,8 @@ ProxyDumpBVH::ComputeTreeletsTopological(const TraversalGraph &graph,
         unordered_map<uint64_t, decltype(cut)::iterator> uniqueLookup;
         ProxySetPtr includedProxies = nodeProxies[curNode];
 
-        // Accounts for size of this node + the size of new instances that would be pulled in
+        // Accounts for size of this node + the size of new instances that would
+        // be pulled in
         auto getAdditionalSize = [this, &includedProxies](uint64_t nodeIdx) {
             const LinearBVHNode &node = nodes[nodeIdx];
 
@@ -997,20 +1040,19 @@ ProxyDumpBVH::ComputeTreeletsTopological(const TraversalGraph &graph,
     return assignment;
 }
 
-vector<uint32_t>
-ProxyDumpBVH::ComputeTreelets(const TraversalGraph &graph,
-                                uint64_t maxTreeletBytes) const {
+vector<uint32_t> ProxyDumpBVH::ComputeTreelets(const TraversalGraph &graph,
+                                               uint64_t maxTreeletBytes) const {
     vector<uint32_t> assignment;
     switch (partitionAlgo) {
-        case PartitionAlgorithm::Topological:
-            assignment = ComputeTreeletsTopological(graph, maxTreeletBytes);
-            break;
-        case PartitionAlgorithm::MergedGraph:
-            assignment = ComputeTreeletsTopological(graph, maxTreeletBytes);
-            break;
-        case PartitionAlgorithm::Nvidia:
-            assignment = ComputeTreeletsNvidia(maxTreeletBytes);
-            break;
+    case PartitionAlgorithm::Topological:
+        assignment = ComputeTreeletsTopological(graph, maxTreeletBytes);
+        break;
+    case PartitionAlgorithm::MergedGraph:
+        assignment = ComputeTreeletsTopological(graph, maxTreeletBytes);
+        break;
+    case PartitionAlgorithm::Nvidia:
+        assignment = ComputeTreeletsNvidia(maxTreeletBytes);
+        break;
     }
 
     uint64_t totalBytesStats = 0;
@@ -1020,7 +1062,8 @@ ProxyDumpBVH::ComputeTreelets(const TraversalGraph &graph,
         uint32_t treelet = assignment[nodeIdx];
         CHECK_NE(treelet, 0);
 
-        proxiesTracker[treelet] = ProxyUnion(proxiesTracker[treelet], nodeProxies[nodeIdx]);
+        proxiesTracker[treelet] =
+            ProxyUnion(proxiesTracker[treelet], nodeProxies[nodeIdx]);
 
         uint64_t bytes = nodeSizes[nodeIdx];
 
@@ -1053,24 +1096,25 @@ struct NvidiaCut {
     uint64_t additionalNodeSize;
     uint64_t additionalSubtreeSize;
     NvidiaCut(uint64_t n, uint64_t nodeBytes, uint64_t subtreeBytes)
-        : nodeIdx(n), additionalNodeSize(nodeBytes),
-          additionalSubtreeSize(subtreeBytes)
-    {}
+        : nodeIdx(n),
+          additionalNodeSize(nodeBytes),
+          additionalSubtreeSize(subtreeBytes) {}
 };
 
-vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBytes) const {
+vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(
+    const uint64_t maxTreeletBytes) const {
     vector<uint32_t> labels(nodeCount);
 
     /* pass one */
     vector<float> best_costs(nodeCount, 0);
 
     for (uint64_t root_index = nodeCount; root_index-- > 0;) {
-        const LinearBVHNode & root_node = nodes[root_index];
+        const LinearBVHNode &root_node = nodes[root_index];
 
         vector<NvidiaCut> cut;
-        cut.emplace_back(root_index,
-                         nodeSizes[root_index] + nodeProxySizes[root_index],
-                         subtreeSizes[root_index] + subtreeProxySizes[root_index]);
+        cut.emplace_back(
+            root_index, nodeSizes[root_index] + nodeProxySizes[root_index],
+            subtreeSizes[root_index] + subtreeProxySizes[root_index]);
         best_costs[root_index] = std::numeric_limits<float>::max();
 
         unordered_set<const ProxyBVH *> included_proxies;
@@ -1086,7 +1130,8 @@ vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBy
 
                 float gain = nodeBounds[n];
 
-                uint64_t price = min(iter->additionalSubtreeSize, remaining_size);
+                uint64_t price =
+                    min(iter->additionalSubtreeSize, remaining_size);
                 float score = gain / price;
                 if (score > best_score) {
                     best_node_iter = iter;
@@ -1117,14 +1162,22 @@ vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBy
                 }
             }
 
-            const LinearBVHNode & best_node = nodes[best_node_index];
+            const LinearBVHNode &best_node = nodes[best_node_index];
 
             if (best_node.nPrimitives == 0) {
-                uint64_t leftNodeAdditionalSize = nodeSizes[best_node_index + 1] + nodeProxySizes[best_node_index + 1];
-                uint64_t leftSubtreeAdditionalSize = subtreeSizes[best_node_index + 1] + subtreeProxySizes[best_node_index + 1];
+                uint64_t leftNodeAdditionalSize =
+                    nodeSizes[best_node_index + 1] +
+                    nodeProxySizes[best_node_index + 1];
+                uint64_t leftSubtreeAdditionalSize =
+                    subtreeSizes[best_node_index + 1] +
+                    subtreeProxySizes[best_node_index + 1];
 
-                uint64_t rightNodeAdditionalSize = nodeSizes[best_node.secondChildOffset] + nodeProxySizes[best_node.secondChildOffset];
-                uint64_t rightSubtreeAdditionalSize = subtreeSizes[best_node.secondChildOffset] + subtreeProxySizes[best_node.secondChildOffset];
+                uint64_t rightNodeAdditionalSize =
+                    nodeSizes[best_node.secondChildOffset] +
+                    nodeProxySizes[best_node.secondChildOffset];
+                uint64_t rightSubtreeAdditionalSize =
+                    subtreeSizes[best_node.secondChildOffset] +
+                    subtreeProxySizes[best_node.secondChildOffset];
 
                 for (const ProxyBVH *proxy : included_proxies) {
                     if (nodeProxies[best_node_index + 1]->count(proxy)) {
@@ -1135,31 +1188,36 @@ vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBy
                         leftSubtreeAdditionalSize -= proxy->Size();
                     }
 
-                    if (nodeProxies[best_node.secondChildOffset]->count(proxy)) {
+                    if (nodeProxies[best_node.secondChildOffset]->count(
+                            proxy)) {
                         rightNodeAdditionalSize -= proxy->Size();
                     }
 
-                    if (subtreeProxies[best_node.secondChildOffset]->count(proxy)) {
+                    if (subtreeProxies[best_node.secondChildOffset]->count(
+                            proxy)) {
                         rightSubtreeAdditionalSize -= proxy->Size();
                     }
                 }
 
-                cut.emplace_back(best_node_index + 1, leftNodeAdditionalSize, leftSubtreeAdditionalSize);
-                cut.emplace_back(best_node.secondChildOffset, rightNodeAdditionalSize, rightSubtreeAdditionalSize);
+                cut.emplace_back(best_node_index + 1, leftNodeAdditionalSize,
+                                 leftSubtreeAdditionalSize);
+                cut.emplace_back(best_node.secondChildOffset,
+                                 rightNodeAdditionalSize,
+                                 rightSubtreeAdditionalSize);
             }
 
             float this_cost = nodeBounds[root_index];
             for (const auto &cut_elem : cut) {
                 this_cost += best_costs[cut_elem.nodeIdx];
             }
-            best_costs[root_index] = std::min(best_costs[root_index], this_cost);
+            best_costs[root_index] =
+                std::min(best_costs[root_index], this_cost);
         }
     }
 
     auto float_equals = [](const float a, const float b) {
         return fabs(a - b) < 1e-4;
     };
-
 
     uint32_t current_treelet = 0;
 
@@ -1175,11 +1233,11 @@ vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBy
 
         current_treelet++;
 
-        const LinearBVHNode & root_node = nodes[root_index];
+        const LinearBVHNode &root_node = nodes[root_index];
         vector<NvidiaCut> cut;
-        cut.emplace_back(root_index,
-                         nodeSizes[root_index] + nodeProxySizes[root_index],
-                         subtreeSizes[root_index] + subtreeProxySizes[root_index]);
+        cut.emplace_back(
+            root_index, nodeSizes[root_index] + nodeProxySizes[root_index],
+            subtreeSizes[root_index] + subtreeProxySizes[root_index]);
 
         uint64_t remaining_size = maxTreeletBytes;
         const float best_cost = best_costs[root_index];
@@ -1196,7 +1254,8 @@ vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBy
 
                 float gain = nodeBounds[n];
 
-                uint64_t price = min(iter->additionalSubtreeSize, remaining_size);
+                uint64_t price =
+                    min(iter->additionalSubtreeSize, remaining_size);
                 float score = gain / price;
                 if (score > best_score) {
                     best_node_iter = iter;
@@ -1227,14 +1286,22 @@ vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBy
                 }
             }
 
-            const LinearBVHNode & best_node = nodes[best_node_index];
+            const LinearBVHNode &best_node = nodes[best_node_index];
 
             if (best_node.nPrimitives == 0) {
-                uint64_t leftNodeAdditionalSize = nodeSizes[best_node_index + 1] + nodeProxySizes[best_node_index + 1];
-                uint64_t leftSubtreeAdditionalSize = subtreeSizes[best_node_index + 1] + subtreeProxySizes[best_node_index + 1];
+                uint64_t leftNodeAdditionalSize =
+                    nodeSizes[best_node_index + 1] +
+                    nodeProxySizes[best_node_index + 1];
+                uint64_t leftSubtreeAdditionalSize =
+                    subtreeSizes[best_node_index + 1] +
+                    subtreeProxySizes[best_node_index + 1];
 
-                uint64_t rightNodeAdditionalSize = nodeSizes[best_node.secondChildOffset] + nodeProxySizes[best_node.secondChildOffset];
-                uint64_t rightSubtreeAdditionalSize = subtreeSizes[best_node.secondChildOffset] + subtreeProxySizes[best_node.secondChildOffset];
+                uint64_t rightNodeAdditionalSize =
+                    nodeSizes[best_node.secondChildOffset] +
+                    nodeProxySizes[best_node.secondChildOffset];
+                uint64_t rightSubtreeAdditionalSize =
+                    subtreeSizes[best_node.secondChildOffset] +
+                    subtreeProxySizes[best_node.secondChildOffset];
 
                 for (const ProxyBVH *proxy : included_proxies) {
                     if (nodeProxies[best_node_index + 1]->count(proxy)) {
@@ -1245,17 +1312,22 @@ vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBy
                         leftSubtreeAdditionalSize -= proxy->Size();
                     }
 
-                    if (nodeProxies[best_node.secondChildOffset]->count(proxy)) {
+                    if (nodeProxies[best_node.secondChildOffset]->count(
+                            proxy)) {
                         rightNodeAdditionalSize -= proxy->Size();
                     }
 
-                    if (subtreeProxies[best_node.secondChildOffset]->count(proxy)) {
+                    if (subtreeProxies[best_node.secondChildOffset]->count(
+                            proxy)) {
                         rightSubtreeAdditionalSize -= proxy->Size();
                     }
                 }
 
-                cut.emplace_back(best_node_index + 1, leftNodeAdditionalSize, leftSubtreeAdditionalSize);
-                cut.emplace_back(best_node.secondChildOffset, rightNodeAdditionalSize, rightSubtreeAdditionalSize);
+                cut.emplace_back(best_node_index + 1, leftNodeAdditionalSize,
+                                 leftSubtreeAdditionalSize);
+                cut.emplace_back(best_node.secondChildOffset,
+                                 rightNodeAdditionalSize,
+                                 rightSubtreeAdditionalSize);
             }
 
             labels[best_node_index] = current_treelet;
@@ -1278,11 +1350,10 @@ vector<uint32_t> ProxyDumpBVH::ComputeTreeletsNvidia(const uint64_t maxTreeletBy
     return labels;
 }
 
-void ProxyDumpBVH::DumpSanityCheck(const vector<unordered_map<uint64_t, uint32_t>> &treeletNodeLocations) const {
-    enum CHILD {
-        LEFT = 0,
-        RIGHT = 1
-    };
+void ProxyDumpBVH::DumpSanityCheck(
+    const vector<unordered_map<uint64_t, uint32_t>> &treeletNodeLocations)
+    const {
+    enum CHILD { LEFT = 0, RIGHT = 1 };
 
     // Sanity Check for deserializing
     for (uint32_t treeletID = 0; treeletID < allTreelets.size(); treeletID++) {
@@ -1316,8 +1387,10 @@ void ProxyDumpBVH::DumpSanityCheck(const vector<unordered_map<uint64_t, uint32_t
                 uint64_t leftNodeIdx = nodeIdx + 1;
                 uint64_t rightNodeIdx = node.secondChildOffset;
 
-                uint32_t leftTreelet = treeletAllocations[treelet.dirIdx][leftNodeIdx];
-                uint32_t rightTreelet = treeletAllocations[treelet.dirIdx][rightNodeIdx];
+                uint32_t leftTreelet =
+                    treeletAllocations[treelet.dirIdx][leftNodeIdx];
+                uint32_t rightTreelet =
+                    treeletAllocations[treelet.dirIdx][rightNodeIdx];
 
                 if (rightTreelet == treeletID) {
                     q.emplace(nodeIdx, serializedLoc, RIGHT);
@@ -1331,7 +1404,6 @@ void ProxyDumpBVH::DumpSanityCheck(const vector<unordered_map<uint64_t, uint32_t
             serializedLoc++;
         }
     }
-
 }
 
 void ProxyDumpBVH::DumpHeader() const {
@@ -1344,7 +1416,8 @@ void ProxyDumpBVH::DumpHeader() const {
     for (const TreeletInfo &treelet : allTreelets) {
         allTreeletsSize += treelet.noProxySize;
     }
-    header.write(reinterpret_cast<const char *>(&allTreeletsSize), sizeof(uint64_t));
+    header.write(reinterpret_cast<const char *>(&allTreeletsSize),
+                 sizeof(uint64_t));
 
     header.write(reinterpret_cast<const char *>(&nodeCount), sizeof(uint64_t));
 
@@ -1353,14 +1426,16 @@ void ProxyDumpBVH::DumpHeader() const {
     for (const ProxyBVH *proxy : allProxies) {
         string name = proxy->Name();
         uint64_t nameSize = name.size();
-        header.write(reinterpret_cast<const char *>(&nameSize), sizeof(uint64_t));
+        header.write(reinterpret_cast<const char *>(&nameSize),
+                     sizeof(uint64_t));
         header.write(name.c_str(), nameSize);
     }
 
     header.close();
 }
 
-vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const {
+vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
+                                            bool inlineProxies) const {
     // Assign IDs to each treelet
     for (const TreeletInfo &treelet : allTreelets) {
         global::manager.getNextId(ObjectType::Treelet, &treelet);
@@ -1374,8 +1449,10 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
         }
     }
 
-    vector<unordered_map<uint64_t, uint32_t>> treeletNodeLocations(allTreelets.size());
-    vector<unordered_map<const ProxyBVH *, uint32_t>> treeletProxyStarts(allTreelets.size());
+    vector<unordered_map<uint64_t, uint32_t>> treeletNodeLocations(
+        allTreelets.size());
+    vector<unordered_map<const ProxyBVH *, uint32_t>> treeletProxyStarts(
+        allTreelets.size());
     for (uint32_t treeletID = 0; treeletID < allTreelets.size(); treeletID++) {
         const TreeletInfo &treelet = allTreelets[treeletID];
         uint32_t listIdx = 0;
@@ -1435,8 +1512,10 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
                 proto_node.set_left_ref(new_left_ref);
             }
 
-            for (int tIdx = 0; tIdx < proto_node.transformed_primitives_size(); tIdx++) {
-                auto transformedProto = proto_node.mutable_transformed_primitives(tIdx);
+            for (int tIdx = 0; tIdx < proto_node.transformed_primitives_size();
+                 tIdx++) {
+                auto transformedProto =
+                    proto_node.mutable_transformed_primitives(tIdx);
                 uint64_t rootRef = transformedProto->root_ref();
                 uint32_t oldTreelet = (uint32_t)(rootRef >> 32);
                 uint32_t newTreelet = mapping[oldTreelet];
@@ -1459,27 +1538,32 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
             // assign ids
             vector<uint32_t> id_remap;
             for (auto &reader : readers) {
-                uint32_t new_id = global::manager.getNextId(ObjectType::Treelet, reader.get());
+                uint32_t new_id = global::manager.getNextId(ObjectType::Treelet,
+                                                            reader.get());
                 id_remap.push_back(new_id);
             }
 
             if (!multiDir) {
-                nonCopyableProxyRoots[large].push_back(global::manager.getId(readers[0].get()));
+                nonCopyableProxyRoots[large].push_back(
+                    global::manager.getId(readers[0].get()));
             } else {
                 for (int i = 0; i < 8; i++) {
-                    nonCopyableProxyRoots[large].push_back(global::manager.getId(readers[i].get()));
+                    nonCopyableProxyRoots[large].push_back(
+                        global::manager.getId(readers[i].get()));
                 }
             }
 
-            // Redump 
-            // FIXME if a large proxy references proxies that it expects to inline this will be wrong
+            // Redump
+            // FIXME if a large proxy references proxies that it expects to
+            // inline this will be wrong
             for (auto &reader : readers) {
                 uint32_t new_id = global::manager.getId(reader.get());
                 global::manager.recordDependency(
-                        ObjectKey {ObjectType::Treelet, new_id},
-                        ObjectKey {ObjectType::Material, 0});
+                    ObjectKey{ObjectType::Treelet, new_id},
+                    ObjectKey{ObjectType::Material, 0});
 
-                auto writer = global::manager.GetWriter(ObjectType::Treelet, new_id);
+                auto writer =
+                    global::manager.GetWriter(ObjectType::Treelet, new_id);
 
                 copyTreelet(reader, writer, id_remap);
             }
@@ -1495,14 +1579,14 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
             for (int primIdx = 0; primIdx < node.nPrimitives; primIdx++) {
                 auto &prim = primitives[node.primitivesOffset + primIdx];
                 if (prim->GetType() == PrimitiveType::Geometric) {
-                    shared_ptr<GeometricPrimitive> gp = dynamic_pointer_cast<GeometricPrimitive>(prim);
+                    shared_ptr<GeometricPrimitive> gp =
+                        dynamic_pointer_cast<GeometricPrimitive>(prim);
                     const Shape *shape = gp->GetShape();
                     const Triangle *tri = dynamic_cast<const Triangle *>(shape);
                     CHECK_NOTNULL(tri);
                     TriangleMesh *mesh = tri->mesh.get();
 
-                    uint64_t triNum =
-                        (tri->v - tri->mesh->vertexIndices) / 3;
+                    uint64_t triNum = (tri->v - tri->mesh->vertexIndices) / 3;
 
                     CHECK_GE(triNum, 0);
                     trianglesInTreelet[mesh].push_back(triNum);
@@ -1514,7 +1598,8 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
         if (inlineProxies) {
             for (const ProxyBVH *proxy : treelet.proxies) {
                 auto readers = proxy->GetReaders();
-                // Definitely shouldn't be inlining a proxy that takes up more than 1 full treelet
+                // Definitely shouldn't be inlining a proxy that takes up more
+                // than 1 full treelet
                 CHECK_EQ(readers.size(), 1);
                 uint32_t numMeshes;
                 readers[0]->read(&numMeshes);
@@ -1523,17 +1608,19 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
         }
 
         unsigned sTreeletID = global::manager.getId(&treelet);
-        auto writer = global::manager.GetWriter(ObjectType::Treelet, sTreeletID);
+        auto writer =
+            global::manager.GetWriter(ObjectType::Treelet, sTreeletID);
         uint32_t numTriMeshes = trianglesInTreelet.size() + numProxyMeshes;
 
         writer->write(numTriMeshes);
 
         // FIXME add material support
         global::manager.recordDependency(
-            ObjectKey {ObjectType::Treelet, sTreeletID},
-            ObjectKey {ObjectType::Material, 0});
+            ObjectKey{ObjectType::Treelet, sTreeletID},
+            ObjectKey{ObjectType::Material, 0});
 
-        unordered_map<TriangleMesh *, unordered_map<size_t, size_t>> triNumRemap;
+        unordered_map<TriangleMesh *, unordered_map<size_t, size_t>>
+            triNumRemap;
         unordered_map<TriangleMesh *, uint32_t> triMeshIDs;
 
         // Write out rewritten meshes with only triangles in treelet
@@ -1593,16 +1680,15 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
             }
 
             shared_ptr<TriangleMesh> newMesh = make_shared<TriangleMesh>(
-                Transform(), numTris, vertIdxs.data(), numVerts,
-                P.data(), mesh->s ? S.data() : nullptr,
-                mesh->n ? N.data() : nullptr,
+                Transform(), numTris, vertIdxs.data(), numVerts, P.data(),
+                mesh->s ? S.data() : nullptr, mesh->n ? N.data() : nullptr,
                 mesh->uv ? uv.data() : nullptr, mesh->alphaMask,
                 mesh->shadowAlphaMask,
                 mesh->faceIndices ? faceIdxs.data() : nullptr);
 
-
             // Give triangle mesh an ID
-            uint32_t sMeshID = global::manager.getNextId(ObjectType::TriangleMesh);
+            uint32_t sMeshID =
+                global::manager.getNextId(ObjectType::TriangleMesh);
 
             triMeshIDs[mesh] = sMeshID;
 
@@ -1612,8 +1698,10 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
             writer->write(tmProto);
         }
 
-        // Write out the full triangle meshes for all the included proxies referenced by this treelet
-        unordered_map<const ProxyBVH *, unordered_map<uint32_t, uint32_t>> proxyMeshIndices;
+        // Write out the full triangle meshes for all the included proxies
+        // referenced by this treelet
+        unordered_map<const ProxyBVH *, unordered_map<uint32_t, uint32_t>>
+            proxyMeshIndices;
         if (inlineProxies) {
             for (const ProxyBVH *proxy : treelet.proxies) {
                 auto readers = proxy->GetReaders();
@@ -1626,7 +1714,8 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
 
                     uint32_t oldId = tm.id();
 
-                    uint32_t sMeshId = global::manager.getNextId(ObjectType::TriangleMesh);
+                    uint32_t sMeshId =
+                        global::manager.getNextId(ObjectType::TriangleMesh);
                     tm.set_id(sMeshId);
                     tm.set_material_id(0);
                     writer->write(tm);
@@ -1657,7 +1746,8 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
                         if (!largeProxies.count(proxy.get())) {
                             instanceRef = treeletID;
                             instanceRef <<= 32;
-                            instanceRef |= treeletProxyStarts[treeletID].at(proxy.get());
+                            instanceRef |=
+                                treeletProxyStarts[treeletID].at(proxy.get());
                         } else {
                             auto iter = nonCopyableProxyRoots.find(proxy.get());
                             CHECK_NE(iter == nonCopyableProxyRoots.end(), true);
@@ -1672,7 +1762,8 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
 
                     protobuf::TransformedPrimitive tpProto;
                     tpProto.set_root_ref(instanceRef);
-                    *tpProto.mutable_transform() = to_protobuf(tp->GetTransform());
+                    *tpProto.mutable_transform() =
+                        to_protobuf(tp->GetTransform());
 
                     *nodeProto.add_transformed_primitives() = tpProto;
                 } else {
@@ -1695,9 +1786,11 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
             }
 
             if (node.nPrimitives == 0) {
-                uint32_t leftTreeletID = treeletAllocations[treelet.dirIdx][nodeIdx + 1];
+                uint32_t leftTreeletID =
+                    treeletAllocations[treelet.dirIdx][nodeIdx + 1];
                 if (leftTreeletID != treeletID) {
-                    uint32_t sTreeletID = global::manager.getId(&allTreelets[leftTreeletID]);
+                    uint32_t sTreeletID =
+                        global::manager.getId(&allTreelets[leftTreeletID]);
                     uint64_t leftRef = sTreeletID;
                     leftRef <<= 32;
                     leftRef |=
@@ -1705,13 +1798,15 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
                     nodeProto.set_left_ref(leftRef);
                 }
 
-                uint32_t rightTreeletID = treeletAllocations[treelet.dirIdx][node.secondChildOffset];
+                uint32_t rightTreeletID =
+                    treeletAllocations[treelet.dirIdx][node.secondChildOffset];
                 if (rightTreeletID != treeletID) {
-                    uint32_t sTreeletID = global::manager.getId(&allTreelets[rightTreeletID]);
+                    uint32_t sTreeletID =
+                        global::manager.getId(&allTreelets[rightTreeletID]);
                     uint64_t rightRef = sTreeletID;
                     rightRef <<= 32;
-                    rightRef |=
-                        treeletNodeLocations[rightTreeletID].at(node.secondChildOffset);
+                    rightRef |= treeletNodeLocations[rightTreeletID].at(
+                        node.secondChildOffset);
                     nodeProto.set_right_ref(rightRef);
                 }
             }
@@ -1734,14 +1829,19 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
                     protobuf::BVHNode nodeProto;
                     bool success = reader->read(&nodeProto);
                     CHECK_EQ(success, true);
-    
-                    for (int triIdx = 0; triIdx < nodeProto.triangles_size(); triIdx++) {
+
+                    for (int triIdx = 0; triIdx < nodeProto.triangles_size();
+                         triIdx++) {
                         auto tri = nodeProto.mutable_triangles(triIdx);
-                        tri->set_mesh_id(proxyMeshIndices.at(proxy).at(tri->mesh_id()));
+                        tri->set_mesh_id(
+                            proxyMeshIndices.at(proxy).at(tri->mesh_id()));
                     }
 
-                    for (int tIdx = 0; tIdx < nodeProto.transformed_primitives_size(); tIdx++) {
-                        auto transformedProto = nodeProto.mutable_transformed_primitives(tIdx);
+                    for (int tIdx = 0;
+                         tIdx < nodeProto.transformed_primitives_size();
+                         tIdx++) {
+                        auto transformedProto =
+                            nodeProto.mutable_transformed_primitives(tIdx);
                         uint64_t rootRef = transformedProto->root_ref();
                         uint32_t proxyIdx = (uint32_t)(rootRef >> 32);
                         const ProxyBVH *dep = proxy->Dependencies()[proxyIdx];
@@ -1750,10 +1850,12 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root, bool inlineProxies) const
                         if (treeletProxyStarts[treeletID].count(dep)) {
                             instanceRef = treeletID;
                             instanceRef <<= 32;
-                            instanceRef |= treeletProxyStarts[treeletID].at(dep);
+                            instanceRef |=
+                                treeletProxyStarts[treeletID].at(dep);
                         } else {
                             CHECK_EQ(largeProxies.count(dep), 1);
-                            instanceRef = nonCopyableProxyRoots.at(dep)[treelet.dirIdx];
+                            instanceRef =
+                                nonCopyableProxyRoots.at(dep)[treelet.dirIdx];
                             instanceRef <<= 32;
                         }
 
@@ -1806,4 +1908,4 @@ bool ProxyDumpBVH::IntersectP(const Ray &ray) const {
     return false;
 }
 
-}
+}  // namespace pbrt
