@@ -15,6 +15,8 @@ using namespace std;
 
 namespace pbrt {
 
+static auto &_manager = global::manager;
+
 STAT_COUNTER("BVH/Total Ray Transfers", totalRayTransfers);
 
 namespace SizeEstimates {
@@ -1407,7 +1409,7 @@ void ProxyDumpBVH::DumpSanityCheck(
 }
 
 void ProxyDumpBVH::DumpHeader() const {
-    const string dir = global::manager.getScenePath();
+    const string dir = _manager.getScenePath();
     ofstream header(dir + "/HEADER");
     Bounds3f root = nodes[0].bounds;
     header.write(reinterpret_cast<char *>(&root), sizeof(Bounds3f));
@@ -1438,7 +1440,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                                             bool inlineProxies) const {
     // Assign IDs to each treelet
     for (const TreeletInfo &treelet : allTreelets) {
-        global::manager.getNextId(ObjectType::Treelet, &treelet);
+        _manager.getNextId(ObjectType::Treelet, &treelet);
     }
 
     bool multiDir = false;
@@ -1538,18 +1540,18 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
             // assign ids
             vector<uint32_t> id_remap;
             for (auto &reader : readers) {
-                uint32_t new_id = global::manager.getNextId(ObjectType::Treelet,
-                                                            reader.get());
+                uint32_t new_id =
+                    _manager.getNextId(ObjectType::Treelet, reader.get());
                 id_remap.push_back(new_id);
             }
 
             if (!multiDir) {
                 nonCopyableProxyRoots[large].push_back(
-                    global::manager.getId(readers[0].get()));
+                    _manager.getId(readers[0].get()));
             } else {
                 for (int i = 0; i < 8; i++) {
                     nonCopyableProxyRoots[large].push_back(
-                        global::manager.getId(readers[i].get()));
+                        _manager.getId(readers[i].get()));
                 }
             }
 
@@ -1557,13 +1559,12 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
             // FIXME if a large proxy references proxies that it expects to
             // inline this will be wrong
             for (auto &reader : readers) {
-                uint32_t new_id = global::manager.getId(reader.get());
-                global::manager.recordDependency(
+                uint32_t new_id = _manager.getId(reader.get());
+                _manager.recordDependency(
                     ObjectKey{ObjectType::Treelet, new_id},
                     ObjectKey{ObjectType::Material, 0});
 
-                auto writer =
-                    global::manager.GetWriter(ObjectType::Treelet, new_id);
+                auto writer = _manager.GetWriter(ObjectType::Treelet, new_id);
 
                 copyTreelet(reader, writer, id_remap);
             }
@@ -1607,17 +1608,15 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
             }
         }
 
-        unsigned sTreeletID = global::manager.getId(&treelet);
-        auto writer =
-            global::manager.GetWriter(ObjectType::Treelet, sTreeletID);
+        unsigned sTreeletID = _manager.getId(&treelet);
+        auto writer = _manager.GetWriter(ObjectType::Treelet, sTreeletID);
         uint32_t numTriMeshes = trianglesInTreelet.size() + numProxyMeshes;
 
         writer->write(numTriMeshes);
 
         // FIXME add material support
-        global::manager.recordDependency(
-            ObjectKey{ObjectType::Treelet, sTreeletID},
-            ObjectKey{ObjectType::Material, 0});
+        _manager.recordDependency(ObjectKey{ObjectType::Treelet, sTreeletID},
+                                  ObjectKey{ObjectType::Material, 0});
 
         unordered_map<TriangleMesh *, unordered_map<size_t, size_t>>
             triNumRemap;
@@ -1687,8 +1686,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                 mesh->faceIndices ? faceIdxs.data() : nullptr);
 
             // Give triangle mesh an ID
-            uint32_t sMeshID =
-                global::manager.getNextId(ObjectType::TriangleMesh);
+            uint32_t sMeshID = _manager.getNextId(ObjectType::TriangleMesh);
 
             triMeshIDs[mesh] = sMeshID;
 
@@ -1715,7 +1713,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                     uint32_t oldId = tm.id();
 
                     uint32_t sMeshId =
-                        global::manager.getNextId(ObjectType::TriangleMesh);
+                        _manager.getNextId(ObjectType::TriangleMesh);
                     tm.set_id(sMeshId);
                     tm.set_material_id(0);
                     writer->write(tm);
@@ -1790,7 +1788,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                     treeletAllocations[treelet.dirIdx][nodeIdx + 1];
                 if (leftTreeletID != treeletID) {
                     uint32_t sTreeletID =
-                        global::manager.getId(&allTreelets[leftTreeletID]);
+                        _manager.getId(&allTreelets[leftTreeletID]);
                     uint64_t leftRef = sTreeletID;
                     leftRef <<= 32;
                     leftRef |=
@@ -1802,7 +1800,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                     treeletAllocations[treelet.dirIdx][node.secondChildOffset];
                 if (rightTreeletID != treeletID) {
                     uint32_t sTreeletID =
-                        global::manager.getId(&allTreelets[rightTreeletID]);
+                        _manager.getId(&allTreelets[rightTreeletID]);
                     uint64_t rightRef = sTreeletID;
                     rightRef <<= 32;
                     rightRef |= treeletNodeLocations[rightTreeletID].at(
@@ -1870,9 +1868,9 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
 #if 0
     if (root) {
-        ofstream staticAllocOut(global::manager.getScenePath() + "/STATIC0_pre");
+        ofstream staticAllocOut(_manager.getScenePath() + "/STATIC0_pre");
         for (const TreeletInfo &treelet : allTreelets) {
-            uint32_t sTreeletID = global::manager.getId(&treelet);
+            uint32_t sTreeletID = _manager.getId(&treelet);
             staticAllocOut << sTreeletID << " " << treelet.totalProb << endl;
         }
 
@@ -1881,7 +1879,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
             for (const TreeletInfo &treelet : inst->allTreelets) {
                 float instProb = instanceProbabilities[treelet.dirIdx][inst->instanceID];
 
-                uint32_t sTreeletID = global::manager.getId(&treelet);
+                uint32_t sTreeletID = _manager.getId(&treelet);
                 staticAllocOut << sTreeletID << " " << treelet.totalProb * instProb << endl;
             }
         }
@@ -1892,7 +1890,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
     vector<uint32_t> rootTreelets;
     for (int i = 0; i < numRoots; i++) {
-        rootTreelets.push_back(global::manager.getId(&allTreelets[i]));
+        rootTreelets.push_back(_manager.getId(&allTreelets[i]));
     }
 
     return rootTreelets;
