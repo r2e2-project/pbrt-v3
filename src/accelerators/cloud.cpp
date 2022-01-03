@@ -366,14 +366,12 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     }
 
     const uint32_t node_count = reader->read<uint32_t>();
-    const uint32_t primitive_count = reader->read<uint32_t>();
 
     if (node_count == 0) {
         return;
     }
 
     nodes.resize(node_count);
-    tree_primitives.reserve(primitive_count);
 
     reader->read(reinterpret_cast<char *>(&nodes[0]),
                  node_count * sizeof(TreeletNode));

@@ -2791,9 +2791,6 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
     unordered_map<TreeletDumpBVH *, vector<uint32_t>>
         nonCopyableInstanceTreelets;
 
-    // keeping a list of instance meshes that are already cut
-    set<TriangleMesh *> meshesWithTexturesAlreadyCut;
-
     for (uint32_t treeletID = 0; treeletID < allTreelets.size(); treeletID++) {
         const TreeletInfo &treelet = allTreelets[treeletID];
         // Find which triangles / meshes are in treelet
@@ -2852,9 +2849,6 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
 
         uint32_t numTriMeshes = 0;
         writer->write(numTriMeshes);
-
-        LOG(INFO) << "Dumping treelet " << sTreeletID << " (" << treeletID
-                  << ") with " << numTriMeshes << " triangle mesh(es)";
 
         unordered_map<TriangleMesh *,
                       unordered_map<size_t, pair<size_t, size_t>>>
@@ -2981,24 +2975,10 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
         for_each(treelet.instances.begin(), treelet.instances.end(),
                  [&](auto inst) { node_count += inst->nodeCount; });
 
-        uint32_t prim_count = 0;
-
-        for_each(
-            treelet.nodes.begin(), treelet.nodes.end(),
-            [&](const uint64_t idx) { prim_count += nodes[idx].nPrimitives; });
-
-        for_each(treelet.instances.begin(), treelet.instances.end(),
-                 [&](const TreeletDumpBVH *inst) {
-                     for (int i = 0; i < inst->nodeCount; i++) {
-                         prim_count += inst->nodes[i].nPrimitives;
-                     }
-                 });
-
         LOG(INFO) << "Treelet " << sTreeletID << " (" << treeletID << ") has "
-                  << node_count << " nodes and " << prim_count << " primitives";
+                  << node_count << " nodes";
 
         writer->write(static_cast<uint32_t>(node_count));
-        writer->write(static_cast<uint32_t>(prim_count));
 
         size_t current_primitive_offset = 0;
         vector<CloudBVH::TreeletNode> output_nodes;
