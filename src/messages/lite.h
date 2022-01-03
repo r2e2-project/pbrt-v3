@@ -55,6 +55,8 @@ class LiteRecordWriter {
     template <class T>
     void write_at(const size_t offset, const T& t);
 
+    size_t offset() { return fout_.tellp(); }
+
   private:
     std::ofstream fout_{};
 };
