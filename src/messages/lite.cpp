@@ -51,6 +51,13 @@ void LiteRecordReader::read(char* dst, size_t len) {
     buffer_ += rec_len;
 }
 
+void LiteRecordReader::skip(const size_t n) {
+    if (n == 0) return;
+    for (size_t i = 0; i < n; i++) {
+        read(nullptr, next_record_size());
+    }
+}
+
 void LiteRecordWriter::write(const char* buf, const uint32_t len) {
     fout_.write(reinterpret_cast<const char*>(&len), sizeof(len));
     fout_.write(buf, len);

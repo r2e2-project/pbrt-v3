@@ -12,6 +12,8 @@ class RecordReader {
 
     virtual uint32_t next_record_size() = 0;
 
+    virtual void skip(const size_t n) = 0;
+
     template <class T>
     T read();
 
@@ -27,6 +29,7 @@ class LiteRecordReader : public RecordReader {
 
     uint32_t next_record_size() override;
     void read(char* dst, size_t len) override;
+    void skip(const size_t n) override;
 
     using RecordReader::read;
 
