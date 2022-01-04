@@ -62,7 +62,7 @@ FileRecordReader::FileRecordReader(const string& path)
     : fin_(path, ios::binary) {}
 
 uint32_t FileRecordReader::next_record_size() {
-    if (next_size_ > 0) return;
+    if (next_size_ > 0) return next_size_;
 
     if (fin_.good() && !fin_.eof()) {
         fin_.read(reinterpret_cast<char*>(&next_size_), sizeof(uint32_t));
