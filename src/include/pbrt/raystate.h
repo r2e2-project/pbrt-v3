@@ -3,21 +3,13 @@
 
 #include <memory>
 
+#include "common.h"
 #include "geometry.h"
 #include "interaction.h"
 #include "spectrum.h"
 #include "transform.h"
 
 namespace pbrt {
-
-struct __attribute__((packed, aligned(1))) MaterialKey {
-    uint32_t treelet{0};
-    uint32_t id{0};
-
-    bool operator<(const MaterialKey &o) const {
-        return (treelet == o.treelet) ? (id < o.id) : (treelet < o.treelet);
-    }
-};
 
 struct RayState;
 using RayStatePtr = std::unique_ptr<RayState>;

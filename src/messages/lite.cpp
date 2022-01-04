@@ -3,6 +3,8 @@
 #include <cstring>
 #include <iostream>
 
+#include "pbrt/common.h"
+
 using namespace std;
 
 template <class T>
@@ -20,6 +22,7 @@ std::string RecordReader::read() {
     return res;
 }
 
+template pbrt::MaterialKey RecordReader::read<pbrt::MaterialKey>();
 template uint32_t RecordReader::read<uint32_t>();
 template uint64_t RecordReader::read<uint64_t>();
 
