@@ -1,16 +1,22 @@
 #include "proxydumpbvh.h"
 
+#include <Ptexture.h>
+
 #include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <iomanip>
+#include <queue>
 #include <type_traits>
 
 #include "accelerators/cloud.h"
+#include "messages/lite.h"
+#include "messages/serdes.h"
 #include "messages/utils.h"
 #include "paramset.h"
 #include "pbrt.pb.h"
 #include "stats.h"
+
 using namespace std;
 
 namespace pbrt {
@@ -1436,6 +1442,526 @@ void ProxyDumpBVH::DumpHeader() const {
     header.close();
 }
 
+map<uint32_t, uint32_t> cutPtexTexture(const string &srcPath,
+                                       const string &dstPath,
+                                       const set<uint32_t> &usedFaces) {
+    // now we have to cut this ptex
+    Ptex::String error;
+    PtexPtr<PtexTexture> src{PtexTexture::open(srcPath.c_str(), error, false)};
+
+    if (!src) {
+        Error("%s", error.c_str());
+        throw runtime_error("failed to open ptex file for reading: " + srcPath);
+    }
+
+    PtexPtr<PtexWriter> dst{PtexWriter::open(
+        dstPath.c_str(), src->meshType(), src->dataType(), src->numChannels(),
+        src->alphaChannel(), src->numFaces(), error, src->hasMipMaps())};
+
+    if (!dst) {
+        Error("%s", error.c_str());
+        throw runtime_error("failed to open ptex file for writing: " + dstPath);
+    }
+
+    dst->setBorderModes(src->uBorderMode(), src->vBorderMode());
+    dst->setEdgeFilterMode(src->edgeFilterMode());
+    dst->writeMeta(src->getMetaData());
+
+    size_t outFaceId = 0;
+    map<uint32_t, uint32_t> oldToNew;
+    vector<uint32_t> newToOld;
+    vector<char> facebuffer;
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(src->numFaces()); i++) {
+        if (!usedFaces.count(i)) continue;
+        newToOld.push_back(i);
+        oldToNew[i] = outFaceId++;
+
+        const Ptex::FaceInfo &face_info = src->getFaceInfo(i);
+
+        for (int j = 0; j < 4; j++) {
+            const auto adjFaceId = face_info.adjface(j);
+            if (adjFaceId != -1 && !usedFaces.count(adjFaceId)) {
+                newToOld.push_back(adjFaceId);
+                oldToNew[adjFaceId] = outFaceId++;
+            }
+        }
+    }
+
+    for (int i = 0; i < outFaceId; i++) {
+        const auto oldIdx = newToOld[i];
+
+        /* do we need to write this face? */
+        bool used = usedFaces.count(oldIdx) > 0;
+
+        Ptex::FaceInfo face_info = src->getFaceInfo(oldIdx);
+        size_t bufferLen = Ptex::DataSize(src->dataType()) *
+                           src->numChannels() * face_info.res.size();
+
+        auto gid = [&](const int oldId) {
+            return oldId == -1 ? -1 : oldToNew.at(oldId);
+        };
+
+        auto gidX = [&](const int oldId) {
+            return (oldId == -1 or !oldToNew.count(oldId)) ? -1
+                                                           : oldToNew.at(oldId);
+        };
+
+        if (used) {
+            face_info.setadjfaces(
+                gid(face_info.adjface(0)), gid(face_info.adjface(1)),
+                gid(face_info.adjface(2)), gid(face_info.adjface(3)));
+        } else {
+            face_info.setadjfaces(
+                gidX(face_info.adjface(0)), gidX(face_info.adjface(1)),
+                gidX(face_info.adjface(2)), gidX(face_info.adjface(3)));
+        }
+
+        if (facebuffer.size() < bufferLen) {
+            facebuffer.resize(bufferLen);
+        }
+
+        src->getData(oldIdx, &facebuffer[0], 0);
+
+        if (!dst->writeFace(i, face_info, &facebuffer[0], 0)) {
+            throw runtime_error("writing face failed");
+        }
+    }
+
+    // writing out the new texture file
+    CHECK(dst->close(error));
+
+    return oldToNew;
+}
+
+size_t getTotalTextureSize(const uint32_t materialId) {
+    static map<uint32_t, size_t> textureSizes = {};
+
+    if (not materialId) {
+        return 0;
+    }
+
+    if (textureSizes.count(materialId)) {
+        return textureSizes.at(materialId);
+    }
+
+    auto &allDeps = _manager.getDependenciesMap();
+
+    if (allDeps.count({ObjectType::Material, materialId}) == 0) {
+        return 0;
+    }
+
+    size_t output = 0;
+
+    for (const auto &dep : allDeps.at({ObjectType::Material, materialId})) {
+        if (dep.type == ObjectType::SpectrumTexture ||
+            dep.type == ObjectType::FloatTexture) {
+            if (allDeps.count(dep)) {
+                for (const auto &tdep : allDeps.at(dep)) {
+                    if (tdep.type != ObjectType::Texture) continue;
+                    output += roost::file_size(
+                        _manager.getFilePath(tdep.type, tdep.id));
+                }
+            }
+        }
+    }
+
+    textureSizes[materialId] = output;
+    return output;
+}
+
+using TextureList =
+    vector<tuple<int /* type */, string /* name */, uint32_t /* id */,
+                 protobuf::FloatTexture, protobuf::SpectrumTexture,
+                 string /* filename */>>;
+
+enum { FLOAT, SPECTRUM };
+
+TextureList getTextureList(const protobuf::Material &mtl) {
+    TextureList textures;
+
+    for (auto &tex : mtl.float_textures()) {
+        const auto &name = tex.first;
+        const auto id = tex.second;
+
+        protobuf::FloatTexture ftex;
+        _manager.GetReader(ObjectType::FloatTexture, id)->read(&ftex);
+
+        if (ftex.name() == "imagemap") {
+            throw runtime_error("imagemap textures are not supported");
+        } else if (ftex.name() == "ptex") {
+            const ParamSet pset = from_protobuf(ftex.params());
+            textures.emplace_back(FLOAT, name, id, ftex,
+                                  protobuf::SpectrumTexture{},
+                                  pset.FindOneString("filename", ""));
+        }
+    }
+
+    for (auto &tex : mtl.spectrum_textures()) {
+        const auto &name = tex.first;
+        const auto id = tex.second;
+
+        protobuf::SpectrumTexture stex;
+        _manager.GetReader(ObjectType::SpectrumTexture, id)->read(&stex);
+
+        if (stex.name() == "imagemap") {
+            throw runtime_error("imagemap textures are not supported");
+        } else if (stex.name() == "ptex") {
+            const ParamSet pset = from_protobuf(stex.params());
+            textures.emplace_back(SPECTRUM, name, id, protobuf::FloatTexture{},
+                                  stex, pset.FindOneString("filename", ""));
+        }
+    }
+
+    return textures;
+}
+
+TextureList getTextureList(const uint32_t mtlId) {
+    if (not mtlId) {
+        return {};
+    }
+
+    protobuf::Material mtl;
+    _manager.GetReader(ObjectType::Material, mtlId)->read(&mtl);
+    return getTextureList(mtl);
+}
+
+void createTexturePartition(const vector<string> &textureKey,
+                            const set<uint32_t> &usedFaces) {
+    auto oldToNewFaceMapping = make_shared<map<uint32_t, uint32_t>>();
+    vector<ObjectID> partKey;
+
+    for (auto &tex : textureKey) {
+        const uint32_t newtid = _manager.getNextId(ObjectType::Texture);
+        const auto newtex = _manager.getFileName(ObjectType::Texture, newtid);
+        const string srcPath = _manager.getScenePath() + "/" + tex;
+        const string dstPath = _manager.getScenePath() + "/" + newtex;
+
+        LOG(INFO) << "Cutting texture " << tex
+                  << ", size = " << format_bytes(roost::file_size(srcPath));
+
+        const auto mapping = cutPtexTexture(srcPath, dstPath, usedFaces);
+
+        LOG(INFO) << "Texture " << tex << " is cut into a new one (" << newtex
+                  << "), size = " << format_bytes(roost::file_size(dstPath));
+
+        oldToNewFaceMapping->insert(mapping.begin(), mapping.end());
+        partKey.push_back(newtid);
+    }
+
+    _manager.addToCompoundTexture(textureKey, partKey, oldToNewFaceMapping);
+}
+
+uint32_t createMaterialPartition(const uint32_t mtlId,
+                                 const vector<string> &oldTextureKey,
+                                 const vector<ObjectID> &partKey) {
+    map<string, ObjectID> textureKey;
+    for (size_t i = 0; i < oldTextureKey.size(); i++) {
+        textureKey[oldTextureKey.at(i)] = partKey.at(i);
+    }
+
+    TextureList textures{getTextureList(mtlId)};
+    if (textures.empty()) {
+        throw runtime_error("the material has no textures");
+    }
+
+    protobuf::Material mtl;
+    _manager.GetReader(ObjectType::Material, mtlId)->read(&mtl);
+
+    auto newMtlId = _manager.getNextId(ObjectType::Material);
+
+    for (auto &tex : textures) {
+        const int type = get<0>(tex);
+        const string &tname = get<1>(tex);
+        const uint32_t tid = get<2>(tex);
+
+        auto &ftexProto = get<3>(tex);
+        auto &stexProto = get<4>(tex);
+
+        ParamSet pset = from_protobuf(type == FLOAT ? ftexProto.params()
+                                                    : stexProto.params());
+
+        const string filename = pset.FindOneString("filename", "");
+        if (filename.empty()) {
+            throw runtime_error("ptex texture with no filename");
+        }
+
+        // update the path to texture in stex
+        std::unique_ptr<std::string[]> filenameVal(new std::string[1]);
+        filenameVal[0] =
+            _manager.getFileName(ObjectType::Texture, textureKey.at(filename));
+        pset.AddString("filename", move(filenameVal), 1);
+
+        if (type == FLOAT) {
+            ftexProto.mutable_params()->CopyFrom(to_protobuf(pset));
+            const auto newId = _manager.getNextId(ObjectType::FloatTexture);
+            _manager.GetWriter(ObjectType::FloatTexture, newId)
+                ->write(ftexProto);
+            mtl.mutable_float_textures()->operator[](tname) = newId;
+
+            _manager.recordDependency({ObjectType::Material, newMtlId},
+                                      {ObjectType::FloatTexture, newId});
+
+            _manager.recordDependency(
+                {ObjectType::FloatTexture, newId},
+                {ObjectType::Texture, textureKey.at(filename)});
+        } else {
+            stexProto.mutable_params()->CopyFrom(to_protobuf(pset));
+            const auto newId = _manager.getNextId(ObjectType::SpectrumTexture);
+            _manager.GetWriter(ObjectType::SpectrumTexture, newId)
+                ->write(stexProto);
+            mtl.mutable_spectrum_textures()->operator[](tname) = newId;
+
+            _manager.recordDependency({ObjectType::Material, newMtlId},
+                                      {ObjectType::SpectrumTexture, newId});
+
+            _manager.recordDependency(
+                {ObjectType::SpectrumTexture, newId},
+                {ObjectType::Texture, textureKey.at(filename)});
+        }
+    }
+
+    _manager.GetWriter(ObjectType::Material, newMtlId)->write(mtl);
+    return newMtlId;
+}
+
+shared_ptr<TriangleMesh> cutMesh(
+    const uint32_t newMeshId, TriangleMesh *mesh, const vector<size_t> &triNums,
+    unordered_map<size_t, pair<size_t, size_t>> &triNumRemap,
+    function<int(const int)> faceRemap = [](const int a) { return a; }) {
+    size_t numTris = triNums.size();
+    unordered_map<int, size_t> vertexRemap;
+    size_t newIdx = 0;
+    size_t newTriNum = 0;
+
+    for (auto triNum : triNums) {
+        for (int i = 0; i < 3; i++) {
+            int idx = mesh->vertexIndices[triNum * 3 + i];
+            if (vertexRemap.count(idx) == 0) {
+                vertexRemap.emplace(idx, newIdx++);
+            }
+        }
+
+        triNumRemap.emplace(triNum, make_pair(newMeshId, newTriNum++));
+    }
+
+    size_t numVerts = newIdx;
+    CHECK_EQ(numVerts, vertexRemap.size());
+
+    vector<int> vertIdxs(numTris * 3);
+    vector<Point3f> P(numVerts);
+    vector<Vector3f> S(numVerts);
+    vector<Normal3f> N(numVerts);
+    vector<Point2f> uv(numVerts);
+    vector<int> faceIdxs(numTris);
+
+    for (size_t i = 0; i < numTris; i++) {
+        size_t triNum = triNums[i];
+        for (int j = 0; j < 3; j++) {
+            int origIdx = mesh->vertexIndices[triNum * 3 + j];
+            int newIdx = vertexRemap.at(origIdx);
+            vertIdxs[i * 3 + j] = newIdx;
+        }
+        if (mesh->faceIndices) {
+            faceIdxs[i] = faceRemap(mesh->faceIndices[triNum]);
+        }
+    }
+
+    for (auto &kv : vertexRemap) {
+        int origIdx = kv.first;
+        int newIdx = kv.second;
+        P[newIdx] = mesh->p[origIdx];
+        if (mesh->s) {
+            S[newIdx] = mesh->s[origIdx];
+        }
+        if (mesh->n) {
+            N[newIdx] = mesh->n[origIdx];
+        }
+        if (mesh->uv) {
+            uv[newIdx] = mesh->uv[origIdx];
+        }
+    }
+
+    return make_shared<TriangleMesh>(
+        Transform(), numTris, vertIdxs.data(), numVerts, P.data(),
+        mesh->s ? S.data() : nullptr, mesh->n ? N.data() : nullptr,
+        mesh->uv ? uv.data() : nullptr, mesh->alphaMask, mesh->shadowAlphaMask,
+        mesh->faceIndices ? faceIdxs.data() : nullptr);
+}
+
+vector<size_t> convertFaceIdsToTriNums(const TriangleMesh *mesh,
+                                       const map<uint32_t, uint32_t> &faceIds) {
+    if (!mesh->faceIndices) {
+        throw runtime_error("mesh doesn't have any face indices");
+    }
+
+    vector<size_t> output;
+
+    for (size_t i = 0; i < mesh->nTriangles; i++) {
+        if (faceIds.count(mesh->faceIndices[i])) {
+            output.push_back(i);
+        }
+    }
+
+    return output;
+}
+
+vector<uint32_t> generateTexturePartitions(const uint32_t mtlID,
+                                           const size_t maxTreeletBytes) {
+    TextureList textures{getTextureList(mtlID)};
+
+    if (textures.empty()) {
+        throw runtime_error("generateTexturePartitions: no textures");
+    }
+
+    Ptex::String error;
+    list<PtexPtr<PtexTexture>> srcs;
+    vector<string> textureKey;
+
+    for (auto &tex : textures) {
+        const int type = get<0>(tex);
+        const string &tname = get<1>(tex);
+        const uint32_t tid = get<2>(tex);
+
+        auto &ftexProto = get<3>(tex);
+        auto &stexProto = get<4>(tex);
+
+        ParamSet pset = from_protobuf(type == FLOAT ? ftexProto.params()
+                                                    : stexProto.params());
+
+        const string filename = pset.FindOneString("filename", "");
+        if (filename.empty()) {
+            throw runtime_error("ptex texture with no filename");
+        }
+
+        const string srcPath = _manager.getScenePath() + "/" + filename;
+        srcs.emplace_back(PtexTexture::open(srcPath.c_str(), error, false));
+        textureKey.push_back(filename);
+    }
+
+    sort(textureKey.begin(), textureKey.end());
+
+    // have we already cut this texture group?
+    if (not _manager.isCompoundTexture(textureKey)) {
+        vector<pair<set<uint32_t>, size_t>>
+            partitions;  // [({faces}, est_size)]
+
+        struct AggFaceData {
+            size_t size{0};
+            uint32_t adj[4] = {numeric_limits<uint32_t>::max(),
+                               numeric_limits<uint32_t>::max(),
+                               numeric_limits<uint32_t>::max(),
+                               numeric_limits<uint32_t>::max()};
+            bool partitioned{false};
+            bool adjacent{false};
+        };
+
+        vector<AggFaceData> faces;
+
+        // make sure all the textures have the same number of faces
+        uint32_t faceCount = srcs.front()->numFaces();
+        for (auto &src : srcs) {
+            if (src->numFaces() != faceCount) {
+                throw runtime_error(
+                    "generateTexturePartitions: not all textures have the same "
+                    "number of faces");
+            }
+        }
+
+        // extract face information and size estimates
+        faces.resize(faceCount);
+        for (auto &src : srcs) {
+            for (size_t i = 0; i < faceCount; i++) {
+                auto &fdata = src->getFaceInfo(i);
+                faces[i].size += Ptex::DataSize(src->dataType()) *
+                                 src->numChannels() *
+                                 (fdata.isConstant() ? 1 : fdata.res.size());
+
+                for (size_t j = 0; j < 4; j++) {
+                    if (fdata.adjface(j) == -1) continue;
+
+                    if (faces[i].adj[j] == numeric_limits<uint32_t>::max()) {
+                        faces[i].adj[j] = fdata.adjface(j);
+                    } else if (faces[i].adj[j] != fdata.adjface(j)) {
+                        throw runtime_error(
+                            "generateTexturePartitions: two textures have "
+                            "different adjacency data");
+                    }
+                }
+            }
+        }
+
+        size_t partitionSize = 0;
+        set<uint32_t> partition;
+        set<uint32_t> adjacents;
+        set<uint32_t> unpartitionedFaces;
+        queue<uint32_t> nextToVisit;
+
+        for (size_t i = 0; i < faceCount; i++) {
+            unpartitionedFaces.insert(unpartitionedFaces.end(), i);
+        }
+
+        auto addFace = [&](const uint32_t id) {
+            partition.insert(id);
+            partitionSize += faces[id].size;
+            faces[id].partitioned = true;
+            unpartitionedFaces.erase(id);
+
+            for (size_t i = 0; i < 4; i++) {
+                const auto adj = faces[id].adj[i];
+
+                if (adj != numeric_limits<uint32_t>::max() &&
+                    !partition.count(adj) && !faces[adj].adjacent) {
+                    faces[adj].adjacent = true;
+                    partitionSize += faces[adj].size;
+
+                    if (not faces[adj].partitioned) {
+                        nextToVisit.push(adj);
+                    }
+                }
+            }
+        };
+
+        while (!unpartitionedFaces.empty()) {
+            nextToVisit.push(*unpartitionedFaces.begin());
+
+            while (!nextToVisit.empty()) {
+                const auto n = nextToVisit.front();
+                nextToVisit.pop();
+
+                if (partitionSize > maxTreeletBytes) {
+                    partitions.emplace_back(move(partition), partitionSize);
+                    partition.clear();
+                    partitionSize = 0;
+                    for (auto &face : faces) face.adjacent = false;
+                }
+
+                addFace(n);
+            }
+        }
+
+        if (not partition.empty()) {
+            partitions.emplace_back(move(partition), partitionSize);
+        }
+
+        for (auto &p : partitions) {
+            createTexturePartition(textureKey, p.first);
+        }
+    }
+
+    vector<uint32_t> newMtlIds;
+
+    for (auto &p : _manager.getCompoundTexture(textureKey)) {
+        auto newMtl = createMaterialPartition(mtlID, textureKey, p.first);
+
+        const auto realSize = getTotalTextureSize(newMtl);
+        newMtlIds.push_back(newMtl);
+        _manager.addToCompoundMaterial(mtlID, newMtl, p.second);
+    }
+
+    return newMtlIds;
+}
+
 vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                                             bool inlineProxies) const {
     // Assign IDs to each treelet
@@ -1472,62 +1998,176 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
     DumpSanityCheck(treeletNodeLocations);
 
-    auto copyTreelet = [&](unique_ptr<protobuf::RecordReader> &reader,
-                           unique_ptr<protobuf::RecordWriter> &writer,
-                           const vector<uint32_t> &mapping) {
-        uint32_t numMeshes = 0;
-        reader->read(&numMeshes);
-        writer->write(numMeshes);
+    map<MaterialKey, MaterialKey> materialKeyRemap;
 
-        for (int i = 0; i < numMeshes; i++) {
-            protobuf::TriangleMesh tm;
-            reader->read(&tm);
-            writer->write(tm);
+    auto duplicateTreelet = [&](unique_ptr<LiteRecordReader> &reader,
+                                unique_ptr<LiteRecordWriter> &writer,
+                                const uint32_t oldTreeletId,
+                                const uint32_t newTreeletId,
+                                const vector<uint32_t> &mapping) {
+        const auto numImgParts = reader->read<uint32_t>();
+        CHECK_EQ(numImgParts, 0);
+        writer->write(numImgParts);
+
+        map<string, string> texRemap;
+        map<uint32_t, uint32_t> ftexRemap, stexRemap;
+        map<uint32_t, uint32_t> meshRemap;
+
+        const auto numTexs = reader->read<uint32_t>();
+        writer->write(numTexs);
+        for (uint32_t i = 0; i < numTexs; i++) {
+            const auto id = reader->read<uint32_t>();
+            const auto len = reader->next_record_size();
+            unique_ptr<char[]> storage{make_unique<char[]>(len)};
+            reader->read(storage.get(), len);
+
+            const auto newId = _manager.getNextId(ObjectType::Texture);
+            writer->write(newId);
+            writer->write(storage.get(), len);
+
+            texRemap[_manager.getFileName(ObjectType::Texture, id)] =
+                _manager.getFileName(ObjectType::Texture, newId);
         }
 
-        while (!reader->eof()) {
-            protobuf::BVHNode proto_node;
-            bool success = reader->read(&proto_node);
-            CHECK_EQ(success, true);
+        const auto numStexs = reader->read<uint32_t>();
+        writer->write(numStexs);
+        for (uint32_t i = 0; i < numStexs; i++) {
+            const auto id = reader->read<uint32_t>();
+            const auto data = reader->read<string>();
 
-            if (proto_node.right_ref()) {
-                uint64_t right_ref = proto_node.right_ref();
-                uint32_t old_right_treelet = (uint32_t)(right_ref >> 32);
-                uint32_t new_right_treelet = mapping[old_right_treelet];
-                uint32_t right_node = (uint32_t)(right_ref);
-                uint64_t new_right_ref = new_right_treelet;
-                new_right_ref <<= 32;
-                new_right_ref |= right_node;
-
-                proto_node.set_right_ref(new_right_ref);
+            protobuf::SpectrumTexture stex_proto;
+            stex_proto.ParseFromString(data);
+            auto params = stex_proto.mutable_params();
+            for (size_t j = 0; j < params->strings_size(); j++) {
+                if (params->strings(j).name() == "filename") {
+                    params->mutable_strings(j)->set_values(
+                        0, texRemap.at(params->strings(j).values(0)));
+                }
             }
 
-            if (proto_node.left_ref()) {
-                uint64_t left_ref = proto_node.left_ref();
-                uint32_t old_left_treelet = (uint32_t)(left_ref >> 32);
-                uint32_t new_left_treelet = mapping[old_left_treelet];
-                uint32_t left_node = (uint32_t)(left_ref);
-                uint64_t new_left_ref = new_left_treelet;
-                new_left_ref <<= 32;
-                new_left_ref |= left_node;
+            const auto newId = _manager.getNextId(ObjectType::SpectrumTexture);
+            writer->write(newId);
+            writer->write(protoutil::to_string(stex_proto));
 
-                proto_node.set_left_ref(new_left_ref);
+            stexRemap[id] = newId;
+        }
+
+        const auto numFtexs = reader->read<uint32_t>();
+        writer->write(numFtexs);
+        for (uint32_t i = 0; i < numFtexs; i++) {
+            const auto id = reader->read<uint32_t>();
+            const auto data = reader->read<string>();
+
+            protobuf::FloatTexture ftex_proto;
+            ftex_proto.ParseFromString(data);
+            auto params = ftex_proto.mutable_params();
+            for (size_t j = 0; j < params->strings_size(); j++) {
+                if (params->strings(j).name() == "filename") {
+                    params->mutable_strings(j)->set_values(
+                        0, texRemap.at(params->strings(j).values(0)));
+                }
             }
 
-            for (int tIdx = 0; tIdx < proto_node.transformed_primitives_size();
-                 tIdx++) {
-                auto transformedProto =
-                    proto_node.mutable_transformed_primitives(tIdx);
-                uint64_t rootRef = transformedProto->root_ref();
+            const auto newId = _manager.getNextId(ObjectType::FloatTexture);
+            writer->write(newId);
+            writer->write(protoutil::to_string(ftex_proto));
+
+            ftexRemap[id] = newId;
+        }
+
+        const auto numMats = reader->read<uint32_t>();
+        for (uint32_t i = 0; i < numFtexs; i++) {
+            const auto id = reader->read<uint32_t>();
+            const auto data = reader->read<string>();
+            protobuf::Material mat_proto;
+            mat_proto.ParseFromString(data);
+
+            for (auto &kv : *mat_proto.mutable_spectrum_textures()) {
+                kv.second = stexRemap[kv.second];
+            }
+
+            for (auto &kv : *mat_proto.mutable_float_textures()) {
+                kv.second = ftexRemap[kv.second];
+            }
+
+            const auto newId = _manager.getNextId(ObjectType::Material);
+            writer->write(newId);
+            writer->write(protoutil::to_string(mat_proto));
+
+            materialKeyRemap[{oldTreeletId, id}] = {newTreeletId, newId};
+        }
+
+        const auto numMeshes = reader->read<uint32_t>();
+        writer->write(numMeshes);
+
+        for (size_t i = 0; i < numMeshes; i++) {
+            const auto meshId = reader->read<uint64_t>();
+            const auto matKey = reader->read<MaterialKey>();
+            const auto areaLightId = reader->read<uint32_t>();
+
+            CHECK_EQ(areaLightId, 0);
+
+            const size_t len = reader->next_record_size();
+            unique_ptr<char[]> storage{make_unique<char[]>(len)};
+            reader->read(storage.get(), len);
+
+            const auto newId = _manager.getNextId(ObjectType::TriangleMesh);
+            writer->write(static_cast<uint64_t>(newId));
+            writer->write(materialKeyRemap[matKey]);
+            writer->write(areaLightId);
+            writer->write(storage.get(), len);
+
+            meshRemap[meshId] = newId;
+        }
+
+        const auto nodeCount = reader->read<uint32_t>();
+        const auto primCount = reader->read<uint32_t>();
+        writer->write(nodeCount);
+        writer->write(primCount);
+
+        vector<CloudBVH::TreeletNode> nodes;
+        nodes.resize(nodeCount);
+        reader->read(reinterpret_cast<char *>(nodes.data()),
+                     sizeof(CloudBVH::TreeletNode) * nodes.size());
+
+        for (auto &node : nodes) {
+            if (!node.is_leaf()) {
+                node.child_treelet[0] = mapping[node.child_treelet[0]];
+                node.child_treelet[1] = mapping[node.child_treelet[1]];
+            }
+        }
+
+        writer->write(reinterpret_cast<char *>(nodes.data()),
+                      sizeof(CloudBVH::TreeletNode) * nodes.size());
+
+        serdes::cloudbvh::TransformedPrimitive serdesTransformed;
+        serdes::cloudbvh::Triangle serdesTriangle;
+
+        for (auto &node : nodes) {
+            const uint32_t transformedCount = reader->read<uint32_t>();
+            const uint32_t triangleCount = reader->read<uint32_t>();
+
+            writer->write(transformedCount);
+            writer->write(triangleCount);
+
+            for (uint32_t i = 0; i < transformedCount; i++) {
+                reader->read(&serdesTransformed);
+
+                uint64_t rootRef = serdesTransformed.root_ref;
                 uint32_t oldTreelet = (uint32_t)(rootRef >> 32);
                 uint32_t newTreelet = mapping[oldTreelet];
                 uint64_t newRootRef = newTreelet;
                 newRootRef <<= 32;
                 newRootRef |= (uint32_t)(rootRef);
-                transformedProto->set_root_ref(newRootRef);
+
+                writer->write(serdesTransformed);
             }
 
-            writer->write(proto_node);
+            for (uint32_t i = 0; i < triangleCount; i++) {
+                reader->read(&serdesTriangle);
+                serdesTriangle.mesh_id = meshRemap[serdesTriangle.mesh_id];
+                writer->write(serdesTriangle);
+            }
         }
     };
 
@@ -1537,36 +2177,38 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
         for (const ProxyBVH *large : largeProxies) {
             auto readers = large->GetReaders();
             CHECK_GT(readers.size(), 0);
+
             // assign ids
             vector<uint32_t> id_remap;
             for (auto &reader : readers) {
-                uint32_t new_id =
-                    _manager.getNextId(ObjectType::Treelet, reader.get());
-                id_remap.push_back(new_id);
+                const uint32_t newId = _manager.getNextId(ObjectType::Treelet,
+                                                          reader.second.get());
+                id_remap.push_back(newId);
             }
 
             if (!multiDir) {
                 nonCopyableProxyRoots[large].push_back(
-                    _manager.getId(readers[0].get()));
+                    _manager.getId(readers[0].second.get()));
             } else {
                 for (int i = 0; i < 8; i++) {
                     nonCopyableProxyRoots[large].push_back(
-                        _manager.getId(readers[i].get()));
+                        _manager.getId(readers[i].second.get()));
                 }
             }
 
             // Redump
-            // FIXME if a large proxy references proxies that it expects to
-            // inline this will be wrong
-            for (auto &reader : readers) {
-                uint32_t new_id = _manager.getId(reader.get());
-                _manager.recordDependency(
-                    ObjectKey{ObjectType::Treelet, new_id},
-                    ObjectKey{ObjectType::Material, 0});
+            // FIXME if a large proxy references proxies that it expects
+            // to inline this will be wrong
+            for (auto it = readers.rbegin(); it != readers.rend(); it++) {
+                const auto oldId = it->first;
+                auto &reader = it->second;
 
-                auto writer = _manager.GetWriter(ObjectType::Treelet, new_id);
+                uint32_t newId = _manager.getId(reader.get());
 
-                copyTreelet(reader, writer, id_remap);
+                auto writer = make_unique<LiteRecordWriter>(
+                    _manager.getFilePath(ObjectType::Treelet, newId));
+
+                duplicateTreelet(reader, writer, oldId, newId, id_remap);
             }
         }
     }
@@ -1599,139 +2241,311 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
         if (inlineProxies) {
             for (const ProxyBVH *proxy : treelet.proxies) {
                 auto readers = proxy->GetReaders();
-                // Definitely shouldn't be inlining a proxy that takes up more
-                // than 1 full treelet
+                // Definitely shouldn't be inlining a proxy that takes
+                // up more than 1 full treelet
                 CHECK_EQ(readers.size(), 1);
                 uint32_t numMeshes;
-                readers[0]->read(&numMeshes);
+                readers[0].second->read(&numMeshes);
                 numProxyMeshes += numMeshes;
             }
         }
 
         unsigned sTreeletID = _manager.getId(&treelet);
-        auto writer = _manager.GetWriter(ObjectType::Treelet, sTreeletID);
-        uint32_t numTriMeshes = trianglesInTreelet.size() + numProxyMeshes;
+        auto writer = make_unique<LiteRecordWriter>(
+            _manager.getFilePath(ObjectType::Treelet, sTreeletID));
 
+        writer->write(static_cast<uint32_t>(0));  // numImgParts
+        writer->write(static_cast<uint32_t>(0));  // numTexs
+        writer->write(static_cast<uint32_t>(0));  // numStexs
+        writer->write(static_cast<uint32_t>(0));  // numFtexs
+        writer->write(static_cast<uint32_t>(0));  // numMats
+
+        uint32_t numTriMeshes = 0;
+        const auto numTriMeshesOffset = writer->offset();
         writer->write(numTriMeshes);
 
-        // FIXME add material support
-        _manager.recordDependency(ObjectKey{ObjectType::Treelet, sTreeletID},
-                                  ObjectKey{ObjectType::Material, 0});
-
-        unordered_map<TriangleMesh *, unordered_map<size_t, size_t>>
-            triNumRemap;
+        unordered_map<TriangleMesh *,
+                      unordered_map<size_t, pair<size_t, size_t>>>
+            triNumRemap;  // mesh -> (triNum -> (newMesh, newTriNum))
         unordered_map<TriangleMesh *, uint32_t> triMeshIDs;
 
         // Write out rewritten meshes with only triangles in treelet
         for (auto &kv : trianglesInTreelet) {
-            TriangleMesh *mesh = kv.first;
-            vector<size_t> &triNums = kv.second;
+            TriangleMesh *const mesh = kv.first;
+            const vector<size_t> &triNums = kv.second;
 
-            size_t numTris = triNums.size();
-            unordered_map<int, size_t> vertexRemap;
-            size_t newIdx = 0;
-            size_t newTriNum = 0;
+            vector<shared_ptr<TriangleMesh>> meshesToWrite;
 
-            for (auto triNum : triNums) {
-                for (int i = 0; i < 3; i++) {
-                    int idx = mesh->vertexIndices[triNum * 3 + i];
-                    if (vertexRemap.count(idx) == 0) {
-                        vertexRemap.emplace(idx, newIdx++);
+            shared_ptr<TriangleMesh> newMesh;
+            const auto newMeshId = _manager.getNextId(ObjectType::TriangleMesh);
+
+            if (!triNums.empty()) {
+                newMesh = cutMesh(newMeshId, mesh, triNums, triNumRemap[mesh]);
+            } else {
+                throw runtime_error("we shouldn't get to this point");
+                // newMesh = {mesh, [](TriangleMesh *) {}};
+
+                // auto &t = triNumRemap[mesh];
+                // for (size_t i = 0; i < mesh->nTriangles; i++) {
+                //     t[i] = make_pair(newMeshId, i);
+                // }
+            }
+
+            const uint32_t mtlID = _manager.getMeshMaterialId(mesh);
+
+            if (_manager.isCompoundMaterial(mtlID)) {
+                auto mtlParts = _manager.getCompoundMaterial(mtlID);
+
+                for (const auto &part : mtlParts) {
+                    const uint32_t partMtlId = part.first;
+                    const auto &faceMap = *part.second;
+                    const auto partTriNums =
+                        convertFaceIdsToTriNums(newMesh.get(), faceMap);
+
+                    const auto partMeshId =
+                        _manager.getNextId(ObjectType::TriangleMesh);
+
+                    LOG(INFO)
+                        << "Making a compound mesh part, id = " << partMeshId;
+
+                    unordered_map<size_t, pair<uint64_t, uint64_t>>
+                        partTriNumRemap;
+
+                    auto partMesh = cutMesh(
+                        partMeshId, newMesh.get(), partTriNums, partTriNumRemap,
+                        [&faceMap](const int a) { return faceMap.at(a); });
+
+                    // merge old and new triNumRemap
+                    auto &oldTriNumRemap = triNumRemap[mesh];
+                    for (auto &kv : oldTriNumRemap) {
+                        if (kv.second.first == newMeshId &&
+                            partTriNumRemap.count(kv.second.second)) {
+                            auto &n = partTriNumRemap.at(kv.second.second);
+                            kv.second.first = n.first;
+                            kv.second.second = n.second;
+                        }
+                    }
+
+                    triMeshIDs[partMesh.get()] = partMeshId;
+                    _manager.recordMeshMaterialId(partMesh.get(), partMtlId);
+                    meshesToWrite.push_back(move(partMesh));
+                }
+
+                for (auto &kv : triNumRemap.at(mesh)) {
+                    if (kv.second.first == newMeshId) {
+                        throw runtime_error(
+                            "some triangles didn't get remapped: " +
+                            to_string(kv.first) + ", " +
+                            to_string(kv.second.second));
                     }
                 }
-                triNumRemap[mesh].emplace(triNum, newTriNum++);
-            }
-            size_t numVerts = newIdx;
-            CHECK_EQ(numVerts, vertexRemap.size());
-
-            vector<int> vertIdxs(numTris * 3);
-            vector<Point3f> P(numVerts);
-            vector<Vector3f> S(numVerts);
-            vector<Normal3f> N(numVerts);
-            vector<Point2f> uv(numVerts);
-            vector<int> faceIdxs(numTris);
-
-            for (size_t i = 0; i < numTris; i++) {
-                size_t triNum = triNums[i];
-                for (int j = 0; j < 3; j++) {
-                    int origIdx = mesh->vertexIndices[triNum * 3 + j];
-                    int newIdx = vertexRemap.at(origIdx);
-                    vertIdxs[i * 3 + j] = newIdx;
-                }
-                if (mesh->faceIndices) {
-                    faceIdxs[i] = mesh->faceIndices[triNum];
-                }
+            } else {
+                triMeshIDs[newMesh.get()] = newMeshId;
+                _manager.recordMeshMaterialId(newMesh.get(), mtlID);
+                meshesToWrite.push_back(move(newMesh));
             }
 
-            for (auto &kv : vertexRemap) {
-                int origIdx = kv.first;
-                int newIdx = kv.second;
-                P[newIdx] = mesh->p[origIdx];
-                if (mesh->s) {
-                    S[newIdx] = mesh->s[origIdx];
-                }
-                if (mesh->n) {
-                    N[newIdx] = mesh->n[origIdx];
-                }
-                if (mesh->uv) {
-                    uv[newIdx] = mesh->uv[origIdx];
-                }
+            const uint32_t areaLightID = _manager.getMeshAreaLightId(mesh);
+
+            LOG(INFO) << "Writing " << meshesToWrite.size()
+                      << " triangle meshe(s).";
+
+            for (auto &m : meshesToWrite) {
+                numTriMeshes++;
+
+                const auto sMeshID = triMeshIDs.at(m.get());
+                const uint32_t mtlID = _manager.getMeshMaterialId(m.get());
+                const auto mData = serdes::triangle_mesh::serialize(*m);
+
+                const auto newMatSize = getTotalTextureSize(mtlID);
+
+                MaterialKey mtlKey;
+                mtlKey.treelet = _manager.getMaterialTreeletId(mtlID);
+                mtlKey.id = mtlID;
+
+                // writing the triangle mesh
+                writer->write(static_cast<uint64_t>(sMeshID));
+                writer->write(mtlKey);
+                writer->write(areaLightID);
+                writer->write(mData);
             }
-
-            shared_ptr<TriangleMesh> newMesh = make_shared<TriangleMesh>(
-                Transform(), numTris, vertIdxs.data(), numVerts, P.data(),
-                mesh->s ? S.data() : nullptr, mesh->n ? N.data() : nullptr,
-                mesh->uv ? uv.data() : nullptr, mesh->alphaMask,
-                mesh->shadowAlphaMask,
-                mesh->faceIndices ? faceIdxs.data() : nullptr);
-
-            // Give triangle mesh an ID
-            uint32_t sMeshID = _manager.getNextId(ObjectType::TriangleMesh);
-
-            triMeshIDs[mesh] = sMeshID;
-
-            protobuf::TriangleMesh tmProto = to_protobuf(*newMesh);
-            tmProto.set_id(sMeshID);
-            tmProto.set_material_id(0);
-            writer->write(tmProto);
         }
 
-        // Write out the full triangle meshes for all the included proxies
-        // referenced by this treelet
+        // Write out the full triangle meshes for all the included
+        // proxies referenced by this treelet
         unordered_map<const ProxyBVH *, unordered_map<uint32_t, uint32_t>>
             proxyMeshIndices;
         if (inlineProxies) {
             for (const ProxyBVH *proxy : treelet.proxies) {
                 auto readers = proxy->GetReaders();
-                uint32_t numMeshes;
-                readers[0]->read(&numMeshes);
+                CHECK_EQ(readers.size(), 1);
+
+                auto &reader = readers[0].second;
+
+                reader->skip(reader->read<uint32_t>());  // numImgParts
+                reader->skip(reader->read<uint32_t>());  // numTexs
+                reader->skip(reader->read<uint32_t>());  // numStexs
+                reader->skip(reader->read<uint32_t>());  // numFtexs
+                reader->skip(reader->read<uint32_t>());  // numMats
+                const uint32_t numMeshes = reader->read<uint32_t>();
 
                 for (int i = 0; i < numMeshes; i++) {
-                    protobuf::TriangleMesh tm;
-                    readers[0]->read(&tm);
+                    numTriMeshes++;
 
-                    uint32_t oldId = tm.id();
+                    const auto oldId = reader->read<uint64_t>();
+                    const auto mtlKey = reader->read<MaterialKey>();
+                    const auto areaLightId = reader->read<uint32_t>();
+                    const auto len = reader->next_record_size();
 
-                    uint32_t sMeshId =
+                    shared_ptr<char> storage{new char[len],
+                                             default_delete<char[]>()};
+                    reader->read(storage.get(), len);
+
+                    auto m = make_shared<TriangleMesh>(storage, 0);
+                    const uint32_t newId =
                         _manager.getNextId(ObjectType::TriangleMesh);
-                    tm.set_id(sMeshId);
-                    tm.set_material_id(0);
-                    writer->write(tm);
-                    proxyMeshIndices[proxy].emplace(oldId, sMeshId);
+
+                    writer->write(static_cast<uint64_t>(newId));
+                    writer->write(mtlKey);
+                    writer->write(areaLightId);
+                    writer->write(serdes::triangle_mesh::serialize(*m));
+
+                    proxyMeshIndices[proxy].emplace(oldId, newId);
                 }
             }
         }
 
+        writer->write_at(numTriMeshesOffset, numTriMeshes);
+
+        size_t current_primitive_offset = 0;
+        vector<CloudBVH::TreeletNode> output_nodes;
+
+        enum Child { LEFT = 0, RIGHT = 1 };
+        stack<pair<uint32_t, Child>> q;
+
         // Write out nodes for treelet
         for (uint64_t nodeIdx : treelet.nodes) {
             const LinearBVHNode &node = nodes[nodeIdx];
+            output_nodes.emplace_back(node.bounds, node.axis);
 
-            protobuf::BVHNode nodeProto;
-            *nodeProto.mutable_bounds() = to_protobuf(node.bounds);
-            nodeProto.set_axis(node.axis);
+            auto &out_node = output_nodes.back();
 
+            if (not q.empty()) {
+                auto parent = q.top();
+                q.pop();
+
+                output_nodes[parent.first].child_treelet[parent.second] =
+                    sTreeletID;
+                output_nodes[parent.first].child_node[parent.second] =
+                    output_nodes.size() - 1;
+            }
+
+            if (node.nPrimitives == 0) {  // it's not a leaf
+                uint32_t r_tid =
+                    treeletAllocations[treelet.dirIdx][node.secondChildOffset];
+                if (r_tid != treeletID) {
+                    out_node.child_treelet[RIGHT] =
+                        _manager.getId(&allTreelets[r_tid]);
+                    out_node.child_node[RIGHT] =
+                        treeletNodeLocations[r_tid].at(node.secondChildOffset);
+                } else {
+                    q.emplace(output_nodes.size() - 1, RIGHT);
+                }
+
+                uint32_t l_tid =
+                    treeletAllocations[treelet.dirIdx][nodeIdx + 1];
+                if (l_tid != treeletID) {
+                    out_node.child_treelet[LEFT] =
+                        _manager.getId(&allTreelets[l_tid]);
+                    out_node.child_node[LEFT] =
+                        treeletNodeLocations[l_tid].at(nodeIdx + 1);
+                } else {
+                    q.emplace(output_nodes.size() - 1, LEFT);
+                }
+            } else {  // it is a leaf
+                out_node.leaf_tag = ~0;
+                out_node.primitive_offset = current_primitive_offset;
+                out_node.primitive_count = node.nPrimitives;
+
+                current_primitive_offset += node.nPrimitives;
+            }
+        }
+
+        writer->write(static_cast<uint32_t>(output_nodes.size()));
+        const auto primCountOffset = writer->offset();
+        writer->write(static_cast<uint32_t>(0));
+
+        writer->write(reinterpret_cast<const char *>(output_nodes.data()),
+                      sizeof(CloudBVH::TreeletNode) * output_nodes.size());
+        output_nodes.clear();
+
+        uint32_t primitiveCount = 0;
+
+        // Write out nodes for instances
+        if (inlineProxies) {
+            for (const ProxyBVH *proxy : treelet.proxies) {
+                auto readers = proxy->GetReaders();
+                auto &reader = readers[0].second;
+
+                reader->skip(reader->read<uint32_t>());      // numImgParts
+                reader->skip(reader->read<uint32_t>());      // numTexs
+                reader->skip(reader->read<uint32_t>());      // numStexs
+                reader->skip(reader->read<uint32_t>());      // numFtexs
+                reader->skip(reader->read<uint32_t>());      // numMats
+                reader->skip(4 * reader->read<uint32_t>());  // numMeshes
+
+                const uint32_t proxy_node_count = reader->read<uint32_t>();
+                const uint32_t proxy_primitive_count = reader->read<uint32_t>();
+                vector<CloudBVH::TreeletNode> proxy_nodes;
+
+                proxy_nodes.resize(proxy_node_count);
+                reader->read(reinterpret_cast<char *>(&nodes[0]),
+                             proxy_node_count * sizeof(CloudBVH::TreeletNode));
+
+                for (auto &pnode : proxy_nodes) {
+                    if (!pnode.is_leaf()) {
+                        pnode.child_treelet[LEFT] = sTreeletID;
+                        pnode.child_treelet[RIGHT] = sTreeletID;
+                        pnode.child_node[LEFT] += output_nodes.size();
+                        pnode.child_node[RIGHT] += output_nodes.size();
+                    } else {
+                        pnode.primitive_offset += current_primitive_offset;
+                    }
+                }
+
+                output_nodes.insert(output_nodes.end(), proxy_nodes.begin(),
+                                    proxy_nodes.end());
+                current_primitive_offset += proxy_primitive_count;
+            }
+        }
+
+        // Write out primitives for treelet
+        serdes::cloudbvh::TransformedPrimitive primitive;
+        serdes::cloudbvh::Triangle triangle;
+
+        for (uint64_t nodeIdx : treelet.nodes) {
+            const LinearBVHNode &node = nodes[nodeIdx];
+
+            uint32_t transformed_primitive_count = 0;
+            uint32_t triangle_count = 0;
+
+            for (int i = 0; i < node.nPrimitives; i++) {
+                if (primitives[node.primitivesOffset + i]->GetType() ==
+                    PrimitiveType::Transformed) {
+                    transformed_primitive_count++;
+                } else {
+                    triangle_count++;
+                }
+            }
+
+            primitiveCount += transformed_primitive_count + triangle_count;
+            writer->write(transformed_primitive_count);
+            writer->write(triangle_count);
+
+            // write all transformed primitives for the node
             for (int primIdx = 0; primIdx < node.nPrimitives; primIdx++) {
                 auto &prim = primitives[node.primitivesOffset + primIdx];
+
                 if (prim->GetType() == PrimitiveType::Transformed) {
                     shared_ptr<TransformedPrimitive> tp =
                         dynamic_pointer_cast<TransformedPrimitive>(prim);
@@ -1739,32 +2553,42 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                         dynamic_pointer_cast<ProxyBVH>(tp->GetPrimitive());
 
                     CHECK_NOTNULL(proxy.get());
-                    uint64_t instanceRef;
+                    uint64_t proxyRef;
                     if (inlineProxies) {
                         if (!largeProxies.count(proxy.get())) {
-                            instanceRef = treeletID;
-                            instanceRef <<= 32;
-                            instanceRef |=
+                            proxyRef = treeletID;
+                            proxyRef <<= 32;
+                            proxyRef |=
                                 treeletProxyStarts[treeletID].at(proxy.get());
                         } else {
                             auto iter = nonCopyableProxyRoots.find(proxy.get());
                             CHECK_NE(iter == nonCopyableProxyRoots.end(), true);
 
-                            instanceRef = iter->second[treelet.dirIdx];
-                            instanceRef <<= 32;
+                            proxyRef = iter->second[treelet.dirIdx];
+                            proxyRef <<= 32;
                         }
                     } else {
-                        instanceRef = proxyOrder.find(proxy.get())->second;
-                        instanceRef <<= 32;
+                        proxyRef = proxyOrder.find(proxy.get())->second;
+                        proxyRef <<= 32;
                     }
 
-                    protobuf::TransformedPrimitive tpProto;
-                    tpProto.set_root_ref(instanceRef);
-                    *tpProto.mutable_transform() =
-                        to_protobuf(tp->GetTransform());
+                    auto &t = tp->GetTransform();
 
-                    *nodeProto.add_transformed_primitives() = tpProto;
-                } else {
+                    primitive.root_ref = proxyRef;
+                    primitive.start_transform = t.StartTransform()->GetMatrix();
+                    primitive.end_transform = t.EndTransform()->GetMatrix();
+                    primitive.start_time = t.StartTime();
+                    primitive.end_time = t.EndTime();
+
+                    writer->write(primitive);
+                }
+            }
+
+            // write all triangles for the node
+            for (int primIdx = 0; primIdx < node.nPrimitives; primIdx++) {
+                auto &prim = primitives[node.primitivesOffset + primIdx];
+
+                if (prim->GetType() != PrimitiveType::Transformed) {
                     shared_ptr<GeometricPrimitive> gp =
                         dynamic_pointer_cast<GeometricPrimitive>(prim);
                     const Shape *shape = gp->GetShape();
@@ -1772,119 +2596,77 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                     CHECK_NOTNULL(tri);
                     TriangleMesh *mesh = tri->mesh.get();
 
-                    uint32_t sMeshID = triMeshIDs.at(mesh);
                     int origTriNum = (tri->v - mesh->vertexIndices) / 3;
-                    int newTriNum = triNumRemap.at(mesh).at(origTriNum);
+                    auto info = triNumRemap.at(mesh).at(origTriNum);
 
-                    protobuf::Triangle triProto;
-                    triProto.set_mesh_id(sMeshID);
-                    triProto.set_tri_number(newTriNum);
-                    *nodeProto.add_triangles() = triProto;
+                    triangle.mesh_id = info.first;
+                    triangle.tri_number = info.second;
+
+                    writer->write(triangle);
                 }
             }
-
-            if (node.nPrimitives == 0) {
-                uint32_t leftTreeletID =
-                    treeletAllocations[treelet.dirIdx][nodeIdx + 1];
-                if (leftTreeletID != treeletID) {
-                    uint32_t sTreeletID =
-                        _manager.getId(&allTreelets[leftTreeletID]);
-                    uint64_t leftRef = sTreeletID;
-                    leftRef <<= 32;
-                    leftRef |=
-                        treeletNodeLocations[leftTreeletID].at(nodeIdx + 1);
-                    nodeProto.set_left_ref(leftRef);
-                }
-
-                uint32_t rightTreeletID =
-                    treeletAllocations[treelet.dirIdx][node.secondChildOffset];
-                if (rightTreeletID != treeletID) {
-                    uint32_t sTreeletID =
-                        _manager.getId(&allTreelets[rightTreeletID]);
-                    uint64_t rightRef = sTreeletID;
-                    rightRef <<= 32;
-                    rightRef |= treeletNodeLocations[rightTreeletID].at(
-                        node.secondChildOffset);
-                    nodeProto.set_right_ref(rightRef);
-                }
-            }
-            writer->write(nodeProto);
         }
 
-        // Write out nodes for instances
+        // Write out primitives for instances
         if (inlineProxies) {
             for (const ProxyBVH *proxy : treelet.proxies) {
                 auto readers = proxy->GetReaders();
-                auto &reader = readers[0];
+                auto &reader = readers[0].second;
 
-                // Skip over all meshes
-                uint32_t numMeshes;
-                reader->read(&numMeshes);
-                reader->skip(numMeshes);
+                reader->skip(reader->read<uint32_t>());      // numImgParts
+                reader->skip(reader->read<uint32_t>());      // numTexs
+                reader->skip(reader->read<uint32_t>());      // numStexs
+                reader->skip(reader->read<uint32_t>());      // numFtexs
+                reader->skip(reader->read<uint32_t>());      // numMats
+                reader->skip(4 * reader->read<uint32_t>());  // numMeshes
 
-                // Read nodes
-                while (!reader->eof()) {
-                    protobuf::BVHNode nodeProto;
-                    bool success = reader->read(&nodeProto);
-                    CHECK_EQ(success, true);
+                const uint32_t proxy_node_count = reader->read<uint32_t>();
+                const uint32_t proxy_primitive_count = reader->read<uint32_t>();
 
-                    for (int triIdx = 0; triIdx < nodeProto.triangles_size();
-                         triIdx++) {
-                        auto tri = nodeProto.mutable_triangles(triIdx);
-                        tri->set_mesh_id(
-                            proxyMeshIndices.at(proxy).at(tri->mesh_id()));
-                    }
+                reader->skip(1);  // skip nodes
+                for (size_t i = 0; i < proxy_node_count; i++) {
+                    const uint32_t transformed_count = reader->read<uint32_t>();
+                    const uint32_t triangle_count = reader->read<uint32_t>();
 
-                    for (int tIdx = 0;
-                         tIdx < nodeProto.transformed_primitives_size();
-                         tIdx++) {
-                        auto transformedProto =
-                            nodeProto.mutable_transformed_primitives(tIdx);
-                        uint64_t rootRef = transformedProto->root_ref();
-                        uint32_t proxyIdx = (uint32_t)(rootRef >> 32);
+                    primitiveCount += transformed_count + triangle_count;
+
+                    writer->write(transformed_count);
+                    writer->write(triangle_count);
+
+                    for (size_t i = 0; i < transformed_count; i++) {
+                        reader->read(&primitive);
+                        const uint32_t proxyIdx =
+                            static_cast<uint32_t>(primitive.root_ref >> 32);
                         const ProxyBVH *dep = proxy->Dependencies()[proxyIdx];
 
-                        uint64_t instanceRef = 0;
+                        uint64_t proxyRef = 0;
                         if (treeletProxyStarts[treeletID].count(dep)) {
-                            instanceRef = treeletID;
-                            instanceRef <<= 32;
-                            instanceRef |=
-                                treeletProxyStarts[treeletID].at(dep);
+                            proxyRef = treeletID;
+                            proxyRef <<= 32;
+                            proxyRef |= treeletProxyStarts[treeletID].at(dep);
                         } else {
                             CHECK_EQ(largeProxies.count(dep), 1);
-                            instanceRef =
+                            proxyRef =
                                 nonCopyableProxyRoots.at(dep)[treelet.dirIdx];
-                            instanceRef <<= 32;
+                            proxyRef <<= 32;
                         }
 
-                        transformedProto->set_root_ref(instanceRef);
+                        primitive.root_ref = proxyRef;
+                        writer->write(primitive);
                     }
 
-                    writer->write(nodeProto);
+                    for (size_t i = 0; i < triangle_count; i++) {
+                        reader->read(&triangle);
+                        triangle.mesh_id =
+                            proxyMeshIndices.at(proxy).at(triangle.mesh_id);
+                        writer->write(triangle);
+                    }
                 }
             }
         }
+
+        writer->write_at(primCountOffset, primitiveCount);
     }
-
-#if 0
-    if (root) {
-        ofstream staticAllocOut(_manager.getScenePath() + "/STATIC0_pre");
-        for (const TreeletInfo &treelet : allTreelets) {
-            uint32_t sTreeletID = _manager.getId(&treelet);
-            staticAllocOut << sTreeletID << " " << treelet.totalProb << endl;
-        }
-
-        for (auto &kv : nonCopyableInstanceTreelets) {
-            const ProxyDumpBVH *inst = kv.first;
-            for (const TreeletInfo &treelet : inst->allTreelets) {
-                float instProb = instanceProbabilities[treelet.dirIdx][inst->instanceID];
-
-                uint32_t sTreeletID = _manager.getId(&treelet);
-                staticAllocOut << sTreeletID << " " << treelet.totalProb * instProb << endl;
-            }
-        }
-    }
-#endif
 
     int numRoots = multiDir ? 8 : 1;
 
