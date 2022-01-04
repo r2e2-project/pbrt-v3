@@ -58,6 +58,44 @@ void LiteRecordReader::skip(const size_t n) {
     }
 }
 
+FileRecordReader::FileRecordReader(const string& path)
+    : fin_(path, ios::binary) {}
+
+uint32_t FileRecordReader::next_record_size() {
+    if (next_size_ > 0) return;
+
+    if (fin_.good() && !fin_.eof()) {
+        fin_.read(reinterpret_cast<char*>(&next_size_), sizeof(uint32_t));
+        if (fin_.gcount() == sizeof(uint32_t)) return next_size_;
+    }
+
+    throw runtime_error("unexcepted end of stream");
+}
+
+void FileRecordReader::read(char* dst, size_t len) {
+    const auto rec_len = next_record_size();
+
+    if (rec_len != len) {
+        throw runtime_error(string("unexpected size: expected ") +
+                            to_string(len) + ", got " + to_string(rec_len));
+    }
+
+    if (dst) {
+        fin_.read(dst, len);
+    } else {
+        fin_.ignore(len);
+    }
+
+    next_size_ = 0;
+}
+
+void FileRecordReader::skip(const size_t n) {
+    if (n == 0) return;
+    for (size_t i = 0; i < n; i++) {
+        read(nullptr, next_record_size());
+    }
+}
+
 void LiteRecordWriter::write(const char* buf, const uint32_t len) {
     fout_.write(reinterpret_cast<const char*>(&len), sizeof(len));
     fout_.write(buf, len);

@@ -9,10 +9,8 @@ class RecordReader {
   public:
     //! reads exactly `dst_len` bytes, throws an exception if failed
     virtual void read(char* dst, size_t len) = 0;
-
     virtual uint32_t next_record_size() = 0;
-
-    virtual void skip(const size_t n) = 0;
+    virtual void skip(const size_t n) { throw std::runtime_error("not impl"); }
 
     template <class T>
     T read();
@@ -37,6 +35,21 @@ class LiteRecordReader : public RecordReader {
     const char* buffer_{nullptr};
     size_t len_{0};
     const char* end_{nullptr};
+};
+
+class FileRecordReader : public RecordReader {
+  public:
+    FileRecordReader(const std::string& path);
+
+    uint32_t next_record_size() override;
+    void read(char* dst, size_t len) override;
+    void skip(const size_t n) override;
+
+    using RecordReader::read;
+
+  private:
+    std::ifstream fin_{};
+    uint32_t next_size_{0};
 };
 
 class LiteRecordWriter {
