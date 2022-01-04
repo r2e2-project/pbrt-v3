@@ -25,7 +25,7 @@ public:
     std::string Name() const { return name_; }
     uint64_t nodeCount() const { return nodeCount_; }
     const std::vector<const ProxyBVH *> & Dependencies() const { return dependencies_; }
-    std::vector<std::pair<uint32_t, std::unique_ptr<LiteRecordReader>>> GetReaders() const;
+    std::vector<std::pair<uint32_t, std::unique_ptr<FileRecordReader>>> GetReaders() const;
     uint64_t UsageCount() const { return numIncludes_; }
     void IncrUsage() { numIncludes_++; }
 
