@@ -94,12 +94,9 @@ ParamSet MaterialBlueprint::FilterParamSet(const ParamSet& src) {
 }
 
 static const string TYPE_PREFIXES[] = {
-    "T",         "TM",         "LIGHTS",
-    "AREALIGHT", "AREALIGHTS", "INFINITELIGHTS",
-    "IMGPART",   "SAMPLER",    "CAMERA",
-    "SCENE",     "MAT",        "FTEX",
-    "STEX",      "MANIFEST",   "TEX",
-    "TINFO",     "STATIC"};
+    "T",       "TM",       "LIGHTS", "AREALIGHT", "AREALIGHTS", "INFLIGHTS",
+    "IMGPART", "SAMPLER",  "CAMERA", "SCENE",     "MAT",        "FTEX",
+    "STEX",    "MANIFEST", "TEX",    "TINFO",     "STATIC"};
 
 static_assert(
     sizeof(TYPE_PREFIXES) / sizeof(string) == to_underlying(ObjectType::COUNT),
