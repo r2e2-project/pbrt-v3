@@ -137,6 +137,7 @@ class ProxyDumpBVH : public BVHAccel {
 
     void DumpSanityCheck(const std::vector<std::unordered_map<uint64_t, uint32_t>> &treeletNodeLocations) const;
 
+    void DumpMaterials() const;
     std::vector<uint32_t> DumpTreelets(bool root, bool inlineProxies) const;
 
     TreeletMap treeletAllocations{};

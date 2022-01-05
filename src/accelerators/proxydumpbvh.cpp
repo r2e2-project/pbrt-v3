@@ -1447,12 +1447,56 @@ shared_ptr<TriangleMesh> cutMesh(
     unordered_map<size_t, pair<size_t, size_t>> &triNumRemap,
     function<int(const int)> faceRemap = [](const int a) { return a; });
 
+size_t getTotalTextureSize(const uint32_t materialId);
+
+void ProxyDumpBVH::DumpMaterials() const {
+    vector<uint32_t> materialIds;
+
+    for (auto mtlId : _manager.getAllMaterialIds()) {
+        auto textureSize = getTotalTextureSize(mtlId);
+        if (textureSize) {
+            throw runtime_error("proxydumpbvh: materials not supported");
+        }
+
+        materialIds.push_back(mtlId);
+    }
+
+    const auto materialTreeletId = _manager.getNextId(ObjectType::Treelet);
+    auto writer = make_unique<LiteRecordWriter>(
+        _manager.getFilePath(ObjectType::Treelet, materialTreeletId));
+
+    cout << "Dumping material treelet " << materialTreeletId << " with "
+         << materialIds.size() << " materials." << endl;
+
+    writer->write(static_cast<uint32_t>(0));  // numImgParts
+    writer->write(static_cast<uint32_t>(0));  // numTexs
+    writer->write(static_cast<uint32_t>(0));  // numStexs
+    writer->write(static_cast<uint32_t>(0));  // numFtexs
+
+    writer->write(static_cast<uint32_t>(materialIds.size()));
+    for (const auto id : materialIds) {
+        _manager.recordMaterialTreeletId(id, materialTreeletId);
+
+        writer->write(id);
+        writer->write_raw(
+            roost::read_file(_manager.getFilePath(ObjectType::Material, id)));
+    }
+
+    writer->write(static_cast<uint32_t>(0));  // triangle meshes
+    writer->write(static_cast<uint32_t>(0));  // nodes
+    writer->write(static_cast<uint32_t>(0));  // triangles
+}
+
 vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                                             bool inlineProxies) const {
     // Assign IDs to each treelet
     for (const TreeletInfo &treelet : allTreelets) {
         _manager.getNextId(ObjectType::Treelet, &treelet);
     }
+
+    // Let's write out all the materials needed in one treelet (textures are not
+    // supported)
+    DumpMaterials();
 
     bool multiDir = false;
     for (const TreeletInfo &info : allTreelets) {
