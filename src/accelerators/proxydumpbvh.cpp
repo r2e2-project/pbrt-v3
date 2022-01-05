@@ -1685,7 +1685,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
         }
 
         const auto numMats = reader->read<uint32_t>();
-        for (uint32_t i = 0; i < numFtexs; i++) {
+        for (uint32_t i = 0; i < numMats; i++) {
             const auto id = reader->read<uint32_t>();
             const auto data = reader->read<string>();
             protobuf::Material mat_proto;
@@ -1938,11 +1938,11 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
                 auto &reader = readers[0].second;
 
-                reader->skip(reader->read<uint32_t>());  // numImgParts
-                reader->skip(reader->read<uint32_t>());  // numTexs
-                reader->skip(reader->read<uint32_t>());  // numStexs
-                reader->skip(reader->read<uint32_t>());  // numFtexs
-                reader->skip(reader->read<uint32_t>());  // numMats
+                reader->skip(2 * reader->read<uint32_t>());  // numImgParts
+                reader->skip(2 * reader->read<uint32_t>());  // numTexs
+                reader->skip(2 * reader->read<uint32_t>());  // numStexs
+                reader->skip(2 * reader->read<uint32_t>());  // numFtexs
+                reader->skip(2 * reader->read<uint32_t>());  // numMats
                 const uint32_t numMeshes = reader->read<uint32_t>();
 
                 for (int i = 0; i < numMeshes; i++) {
@@ -2043,11 +2043,11 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                 auto readers = proxy->GetReaders();
                 auto &reader = readers[0].second;
 
-                reader->skip(reader->read<uint32_t>());      // numImgParts
-                reader->skip(reader->read<uint32_t>());      // numTexs
-                reader->skip(reader->read<uint32_t>());      // numStexs
-                reader->skip(reader->read<uint32_t>());      // numFtexs
-                reader->skip(reader->read<uint32_t>());      // numMats
+                reader->skip(2 * reader->read<uint32_t>());  // numImgParts
+                reader->skip(2 * reader->read<uint32_t>());  // numTexs
+                reader->skip(2 * reader->read<uint32_t>());  // numStexs
+                reader->skip(2 * reader->read<uint32_t>());  // numFtexs
+                reader->skip(2 * reader->read<uint32_t>());  // numMats
                 reader->skip(4 * reader->read<uint32_t>());  // numMeshes
 
                 const uint32_t proxy_node_count = reader->read<uint32_t>();
@@ -2169,11 +2169,11 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                 auto readers = proxy->GetReaders();
                 auto &reader = readers[0].second;
 
-                reader->skip(reader->read<uint32_t>());      // numImgParts
-                reader->skip(reader->read<uint32_t>());      // numTexs
-                reader->skip(reader->read<uint32_t>());      // numStexs
-                reader->skip(reader->read<uint32_t>());      // numFtexs
-                reader->skip(reader->read<uint32_t>());      // numMats
+                reader->skip(2 * reader->read<uint32_t>());  // numImgParts
+                reader->skip(2 * reader->read<uint32_t>());  // numTexs
+                reader->skip(2 * reader->read<uint32_t>());  // numStexs
+                reader->skip(2 * reader->read<uint32_t>());  // numFtexs
+                reader->skip(2 * reader->read<uint32_t>());  // numMats
                 reader->skip(4 * reader->read<uint32_t>());  // numMeshes
 
                 const uint32_t proxy_node_count = reader->read<uint32_t>();

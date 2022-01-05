@@ -22,15 +22,15 @@ vector<pair<uint32_t, std::unique_ptr<FileRecordReader>>> ProxyBVH::GetReaders()
 
         /* is this a material treelet? */
         const auto numImgParts = reader.read<uint32_t>();  // numImgParts
-        reader.skip(numImgParts);
+        reader.skip(2 * numImgParts);
         const auto numTexs = reader.read<uint32_t>();  // numTexs
-        reader.skip(numTexs);
+        reader.skip(2 * numTexs);
         const auto numStexs = reader.read<uint32_t>();  // numStexs
-        reader.skip(numStexs);
+        reader.skip(2 * numStexs);
         const auto numFtexs = reader.read<uint32_t>();  // numFtexs
-        reader.skip(numFtexs);
+        reader.skip(2 * numFtexs);
         const auto numMats = reader.read<uint32_t>();  // numMats
-        reader.skip(numMats);
+        reader.skip(2 * numMats);
 
         if (numImgParts || numTexs || numFtexs || numStexs || numMats) {
             materialReaders.emplace_back(
