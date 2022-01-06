@@ -1462,6 +1462,10 @@ void ProxyDumpBVH::DumpMaterials() const {
         materialIds.push_back(mtlId);
     }
 
+    if (materialIds.empty()) {
+        return;
+    }
+
     const auto materialTreeletId = _manager.getNextId(ObjectType::Treelet);
     auto writer = make_unique<LiteRecordWriter>(
         _manager.getFilePath(ObjectType::Treelet, materialTreeletId));
