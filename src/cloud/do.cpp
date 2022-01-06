@@ -41,6 +41,19 @@ int main(int argc, char const *argv[]) {
         pbrt::scene::Base sceneBase = pbrt::scene::LoadBase(scenePath, 0);
         sceneBase.maxPathDepth = 5;
 
+        /* prepare the scene */
+        MemoryArena arena;
+        vector<unique_ptr<CloudBVH>> treelets;
+        treelets.resize(sceneBase.GetTreeletCount());
+
+        /* let's load all the treelets */
+        for (size_t i = 0; i < treelets.size(); i++) {
+            cout << "Loading treelet " << i << "... ";
+            treelets[i] = make_unique<CloudBVH>(i, false);
+            treelets[i]->LoadTreelet(i);
+            cout << "done." << endl;
+        }
+
         queue<RayStatePtr> rayList;
         vector<Sample> samples;
 
@@ -62,19 +75,6 @@ int main(int argc, char const *argv[]) {
 
         if (!rayList.size()) {
             return EXIT_SUCCESS;
-        }
-
-        /* prepare the scene */
-        MemoryArena arena;
-        vector<unique_ptr<CloudBVH>> treelets;
-        treelets.resize(sceneBase.GetTreeletCount());
-
-        /* let's load all the treelets */
-        for (size_t i = 0; i < treelets.size(); i++) {
-            cout << "Loading treelet " << i << "... ";
-            treelets[i] = make_unique<CloudBVH>(i, false);
-            treelets[i]->LoadTreelet(i);
-            cout << "done." << endl;
         }
 
         while (!rayList.empty()) {
