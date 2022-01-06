@@ -1739,6 +1739,8 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
         writer->write(nodeCount);
         writer->write(primCount);
 
+        if (nodeCount == 0) return;
+
         vector<CloudBVH::TreeletNode> nodes;
         nodes.resize(nodeCount);
         reader->read(reinterpret_cast<char *>(nodes.data()),
