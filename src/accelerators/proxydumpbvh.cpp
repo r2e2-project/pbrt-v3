@@ -1689,6 +1689,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
         }
 
         const auto numMats = reader->read<uint32_t>();
+        writer->write(numMats);
         for (uint32_t i = 0; i < numMats; i++) {
             const auto id = reader->read<uint32_t>();
             const auto data = reader->read<string>();
