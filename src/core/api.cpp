@@ -1838,10 +1838,21 @@ void pbrtProxy(const std::string &name) {
 
     std::shared_ptr<Primitive> proxy = CreateProxy(name);
 
+    const char *xTranslateEnv = getenv("PBRT_PROXY_TRANSLATE_X");
+    const char *yTranslateEnv = getenv("PBRT_PROXY_TRANSLATE_Y");
+    const char *zTranslateEnv = getenv("PBRT_PROXY_TRANSLATE_Z");
+
+    Transform translateHack;
+    if (xTranslateEnv && yTranslateEnv && zTranslateEnv) {
+        const float transX = static_cast<float>(std::stol(xTranslateEnv));
+        const float transY = static_cast<float>(std::stol(yTranslateEnv));
+        const float transZ = static_cast<float>(std::stol(zTranslateEnv));
+        translateHack = Translate(Vector3f(transX, transY, transZ));
+    }
+
     Transform *InstanceToWorld[2] = {
-        transformCache.Lookup(curTransform[0]),
-        transformCache.Lookup(curTransform[1])
-    };
+        transformCache.Lookup(translateHack * curTransform[0]),
+        transformCache.Lookup(translateHack * curTransform[1])};
 
     AnimatedTransform animatedInstanceToWorld(
         InstanceToWorld[0], renderOptions->transformStartTime,
