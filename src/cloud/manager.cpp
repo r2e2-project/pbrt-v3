@@ -204,9 +204,6 @@ protobuf::Manifest SceneManager::makeManifest() const {
             ObjectKey type_id{type, id};
 
             size_t size = 0;
-            if (type != ObjectType::TriangleMesh) {
-                size = roost::file_size_at(*sceneFD, getFileName(type, id));
-            }
 
             protobuf::Manifest::Object* obj = manifest.add_objects();
             obj->set_size(size);
