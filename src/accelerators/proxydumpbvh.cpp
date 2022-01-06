@@ -1617,14 +1617,14 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                                 unique_ptr<LiteRecordWriter> &writer,
                                 const uint32_t oldTreeletId,
                                 const uint32_t newTreeletId,
-                                const map<uint32_t, uint32_t> &mapping) {
+                                const map<uint32_t, uint32_t> &treeletRemap) {
         const auto numImgParts = reader->read<uint32_t>();
         CHECK_EQ(numImgParts, 0);
         writer->write(numImgParts);
 
         map<string, string> texRemap;
         map<uint32_t, uint32_t> ftexRemap, stexRemap;
-        map<uint32_t, uint32_t> meshRemap;
+        map<uint64_t, uint64_t> meshRemap;
 
         const auto numTexs = reader->read<uint32_t>();
         writer->write(numTexs);
@@ -1713,19 +1713,19 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
         const auto numMeshes = reader->read<uint32_t>();
         writer->write(numMeshes);
-
         for (size_t i = 0; i < numMeshes; i++) {
             const auto meshId = reader->read<uint64_t>();
             const auto matKey = reader->read<MaterialKey>();
             const auto areaLightId = reader->read<uint32_t>();
 
-            CHECK_EQ(areaLightId, 0);
+            CHECK_EQ(areaLightId, 0)
+                << "area lights in proxies are not supported";
 
             const size_t len = reader->next_record_size();
             unique_ptr<char[]> storage{make_unique<char[]>(len)};
             reader->read(storage.get(), len);
 
-            const auto newId = _manager.getNextId(ObjectType::TriangleMesh);
+            const uint64_t newId = _manager.getNextId(ObjectType::TriangleMesh);
             writer->write(static_cast<uint64_t>(newId));
             writer->write(materialKeyRemap.at(matKey));
             writer->write(areaLightId);
@@ -1748,8 +1748,8 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
         for (auto &node : nodes) {
             if (!node.is_leaf()) {
-                node.child_treelet[0] = mapping.at(node.child_treelet[0]);
-                node.child_treelet[1] = mapping.at(node.child_treelet[1]);
+                node.child_treelet[0] = treeletRemap.at(node.child_treelet[0]);
+                node.child_treelet[1] = treeletRemap.at(node.child_treelet[1]);
             }
         }
 
@@ -1771,10 +1771,11 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
                 uint64_t rootRef = serdesTransformed.root_ref;
                 uint32_t oldTreelet = (uint32_t)(rootRef >> 32);
-                uint32_t newTreelet = mapping.at(oldTreelet);
+                uint32_t newTreelet = treeletRemap.at(oldTreelet);
                 uint64_t newRootRef = newTreelet;
                 newRootRef <<= 32;
                 newRootRef |= (uint32_t)(rootRef);
+                serdesTransformed.root_ref = newRootRef;
 
                 writer->write(serdesTransformed);
             }
@@ -1795,11 +1796,11 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
             CHECK_GT(readers.size(), 0);
 
             // assign ids
-            map<uint32_t, uint32_t> id_remap;
+            map<uint32_t, uint32_t> treeletRemap;
             for (auto &reader : readers) {
                 const uint32_t newId = _manager.getNextId(ObjectType::Treelet,
                                                           reader.second.get());
-                id_remap[reader.first] = newId;
+                treeletRemap[reader.first] = newId;
             }
 
             if (!multiDir) {
@@ -1824,7 +1825,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                 auto writer = make_unique<LiteRecordWriter>(
                     _manager.getFilePath(ObjectType::Treelet, newId));
 
-                duplicateTreelet(reader, writer, oldId, newId, id_remap);
+                duplicateTreelet(reader, writer, oldId, newId, treeletRemap);
             }
         }
     }
@@ -1853,15 +1854,24 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
             }
         }
 
+        CHECK_EQ(treelet.proxies.empty(), true) << "treelet has inline proxies";
+
         uint32_t numProxyMeshes = 0;
         if (inlineProxies) {
             for (const ProxyBVH *proxy : treelet.proxies) {
                 auto readers = proxy->GetReaders();
                 // Definitely shouldn't be inlining a proxy that takes
                 // up more than 1 full treelet
+                auto &reader = readers[0].second;
+
                 CHECK_EQ(readers.size(), 1);
                 uint32_t numMeshes;
-                readers[0].second->read(&numMeshes);
+                reader->skip(2 * reader->read<uint32_t>());  // numImgParts
+                reader->skip(2 * reader->read<uint32_t>());  // numTexs
+                reader->skip(2 * reader->read<uint32_t>());  // numStexs
+                reader->skip(2 * reader->read<uint32_t>());  // numFtexs
+                reader->skip(2 * reader->read<uint32_t>());  // numMats
+                reader->read(&numMeshes);
                 numProxyMeshes += numMeshes;
             }
         }
@@ -2119,7 +2129,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                     uint64_t proxyRef;
                     if (inlineProxies) {
                         if (!largeProxies.count(proxy.get())) {
-                            proxyRef = treeletID;
+                            proxyRef = sTreeletID;
                             proxyRef <<= 32;
                             proxyRef |=
                                 treeletProxyStarts[treeletID].at(proxy.get());
