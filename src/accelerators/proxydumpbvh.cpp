@@ -1617,7 +1617,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                                 unique_ptr<LiteRecordWriter> &writer,
                                 const uint32_t oldTreeletId,
                                 const uint32_t newTreeletId,
-                                const vector<uint32_t> &mapping) {
+                                const map<uint32_t, uint32_t> &mapping) {
         const auto numImgParts = reader->read<uint32_t>();
         CHECK_EQ(numImgParts, 0);
         writer->write(numImgParts);
@@ -1697,11 +1697,11 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
             mat_proto.ParseFromString(data);
 
             for (auto &kv : *mat_proto.mutable_spectrum_textures()) {
-                kv.second = stexRemap[kv.second];
+                kv.second = stexRemap.at(kv.second);
             }
 
             for (auto &kv : *mat_proto.mutable_float_textures()) {
-                kv.second = ftexRemap[kv.second];
+                kv.second = ftexRemap.at(kv.second);
             }
 
             const auto newId = _manager.getNextId(ObjectType::Material);
@@ -1727,7 +1727,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
             const auto newId = _manager.getNextId(ObjectType::TriangleMesh);
             writer->write(static_cast<uint64_t>(newId));
-            writer->write(materialKeyRemap[matKey]);
+            writer->write(materialKeyRemap.at(matKey));
             writer->write(areaLightId);
             writer->write(storage.get(), len);
 
@@ -1748,8 +1748,8 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
         for (auto &node : nodes) {
             if (!node.is_leaf()) {
-                node.child_treelet[0] = mapping[node.child_treelet[0]];
-                node.child_treelet[1] = mapping[node.child_treelet[1]];
+                node.child_treelet[0] = mapping.at(node.child_treelet[0]);
+                node.child_treelet[1] = mapping.at(node.child_treelet[1]);
             }
         }
 
@@ -1771,7 +1771,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
                 uint64_t rootRef = serdesTransformed.root_ref;
                 uint32_t oldTreelet = (uint32_t)(rootRef >> 32);
-                uint32_t newTreelet = mapping[oldTreelet];
+                uint32_t newTreelet = mapping.at(oldTreelet);
                 uint64_t newRootRef = newTreelet;
                 newRootRef <<= 32;
                 newRootRef |= (uint32_t)(rootRef);
@@ -1781,7 +1781,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
             for (uint32_t i = 0; i < triangleCount; i++) {
                 reader->read(&serdesTriangle);
-                serdesTriangle.mesh_id = meshRemap[serdesTriangle.mesh_id];
+                serdesTriangle.mesh_id = meshRemap.at(serdesTriangle.mesh_id);
                 writer->write(serdesTriangle);
             }
         }
@@ -1795,11 +1795,11 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
             CHECK_GT(readers.size(), 0);
 
             // assign ids
-            vector<uint32_t> id_remap;
+            map<uint32_t, uint32_t> id_remap;
             for (auto &reader : readers) {
                 const uint32_t newId = _manager.getNextId(ObjectType::Treelet,
                                                           reader.second.get());
-                id_remap.push_back(newId);
+                id_remap[reader.first] = newId;
             }
 
             if (!multiDir) {

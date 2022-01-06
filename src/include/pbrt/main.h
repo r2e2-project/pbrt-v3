@@ -97,7 +97,7 @@ namespace graphics {
 
 struct ProcessRayOutput {
     uint64_t pathId{0};
-    std::array<RayStatePtr, 3> rays{};
+    std::array<RayStatePtr, 3> rays{nullptr, nullptr, nullptr};
     RayStatePtr sample{};
     bool pathFinished{false};
 };

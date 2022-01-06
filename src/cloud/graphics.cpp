@@ -16,6 +16,8 @@ using namespace std;
 
 namespace pbrt {
 
+static auto &_manager = global::manager;
+
 STAT_COUNTER("Integrator/Camera rays generated", nCameraRays);
 STAT_COUNTER("Integrator/Total rays traced", totalRays);
 STAT_COUNTER("Intersections/Regular ray intersection tests",
@@ -248,11 +250,9 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
         if (bounceRay) output.rays[0] = move(bounceRay);
         if (shadowRay) output.rays[1] = move(shadowRay);
         if (lightRay) output.rays[2] = move(lightRay);
-
         return;
     } else if (r.needsImageSampling) {
-        auto p = global::manager.getInMemoryImagePartition(
-            r.imageSampleInfo.imageId);
+        auto p = _manager.getInMemoryImagePartition(r.imageSampleInfo.imageId);
         auto Li = p.Lookup(r.imageSampleInfo.uv);
         r.Ld *= Li;
         output.sample = move(rayStatePtr);
