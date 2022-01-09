@@ -1715,6 +1715,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
         writer->write(numMeshes);
         for (size_t i = 0; i < numMeshes; i++) {
             const auto meshId = reader->read<uint64_t>();
+            const auto isInstanceMesh = reader->read<bool>();
             const auto matKey = reader->read<MaterialKey>();
             const auto areaLightId = reader->read<uint32_t>();
 
@@ -1727,6 +1728,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
             const uint64_t newId = _manager.getNextId(ObjectType::TriangleMesh);
             writer->write(static_cast<uint64_t>(newId));
+            writer->write(isInstanceMesh);
             writer->write(materialKeyRemap.at(matKey));
             writer->write(areaLightId);
             writer->write(storage.get(), len);
@@ -1938,6 +1940,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
                 // writing the triangle mesh
                 writer->write(static_cast<uint64_t>(sMeshID));
+                writer->write(false);
                 writer->write(mtlKey);
                 writer->write(areaLightID);
                 writer->write(mData);
@@ -1966,6 +1969,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                     numTriMeshes++;
 
                     const auto oldId = reader->read<uint64_t>();
+                    const auto isInstanceMesh = reader->read<bool>();
                     const auto mtlKey = reader->read<MaterialKey>();
                     const auto areaLightId = reader->read<uint32_t>();
                     const auto len = reader->next_record_size();
@@ -1979,6 +1983,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                         _manager.getNextId(ObjectType::TriangleMesh);
 
                     writer->write(static_cast<uint64_t>(newId));
+                    writer->write(isInstanceMesh);
                     writer->write(mtlKey);
                     writer->write(areaLightId);
                     writer->write(serdes::triangle_mesh::serialize(*m));
@@ -2065,7 +2070,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                 reader->skip(2 * reader->read<uint32_t>());  // numStexs
                 reader->skip(2 * reader->read<uint32_t>());  // numFtexs
                 reader->skip(2 * reader->read<uint32_t>());  // numMats
-                reader->skip(4 * reader->read<uint32_t>());  // numMeshes
+                reader->skip(5 * reader->read<uint32_t>());  // numMeshes
 
                 const uint32_t proxy_node_count = reader->read<uint32_t>();
                 const uint32_t proxy_primitive_count = reader->read<uint32_t>();
@@ -2191,7 +2196,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                 reader->skip(2 * reader->read<uint32_t>());  // numStexs
                 reader->skip(2 * reader->read<uint32_t>());  // numFtexs
                 reader->skip(2 * reader->read<uint32_t>());  // numMats
-                reader->skip(4 * reader->read<uint32_t>());  // numMeshes
+                reader->skip(5 * reader->read<uint32_t>());  // numMeshes
 
                 const uint32_t proxy_node_count = reader->read<uint32_t>();
                 const uint32_t proxy_primitive_count = reader->read<uint32_t>();

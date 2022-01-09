@@ -2870,13 +2870,15 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
             TriangleMesh *const mesh = kv.first;
             const vector<size_t> &triNums = kv.second;
 
-            vector<shared_ptr<TriangleMesh>> meshesToWrite;
+            vector<pair<shared_ptr<TriangleMesh>, bool>> meshesToWrite;
 
             shared_ptr<TriangleMesh> newMesh;
             const auto newMeshId = _manager.getNextId(ObjectType::TriangleMesh);
 
+            bool isInstanceMesh;
             if (!triNums.empty()) {
                 newMesh = cutMesh(newMeshId, mesh, triNums, triNumRemap[mesh]);
+                isInstanceMesh = false;
             } else {
                 newMesh = {mesh, [](TriangleMesh *) {}};
 
@@ -2884,6 +2886,8 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
                 for (size_t i = 0; i < mesh->nTriangles; i++) {
                     t[i] = make_pair(newMeshId, i);
                 }
+
+                isInstanceMesh = true;
             }
 
             const uint32_t mtlID = _manager.getMeshMaterialId(mesh);
@@ -2924,7 +2928,7 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
 
                     triMeshIDs[partMesh.get()] = partMeshId;
                     _manager.recordMeshMaterialId(partMesh.get(), partMtlId);
-                    meshesToWrite.push_back(move(partMesh));
+                    meshesToWrite.emplace_back(move(partMesh), isInstanceMesh);
                 }
 
                 for (auto &kv : triNumRemap.at(mesh)) {
@@ -2938,7 +2942,7 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
             } else {
                 triMeshIDs[newMesh.get()] = newMeshId;
                 _manager.recordMeshMaterialId(newMesh.get(), mtlID);
-                meshesToWrite.push_back(move(newMesh));
+                meshesToWrite.emplace_back(move(newMesh), isInstanceMesh);
             }
 
             const uint32_t areaLightID = _manager.getMeshAreaLightId(mesh);
@@ -2949,9 +2953,10 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
             for (auto &m : meshesToWrite) {
                 numTriMeshes++;
 
-                const auto sMeshID = triMeshIDs.at(m.get());
-                const uint32_t mtlID = _manager.getMeshMaterialId(m.get());
-                const auto mData = serdes::triangle_mesh::serialize(*m);
+                const auto sMeshID = triMeshIDs.at(m.first.get());
+                const uint32_t mtlID =
+                    _manager.getMeshMaterialId(m.first.get());
+                const auto mData = serdes::triangle_mesh::serialize(*m.first);
 
                 const auto newMatSize = getTotalTextureSize(mtlID);
 
@@ -2961,6 +2966,7 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
 
                 // writing the triangle mesh
                 writer->write(static_cast<uint64_t>(sMeshID));
+                writer->write(static_cast<bool>(root && !m.second));
                 writer->write(reinterpret_cast<const char *>(&mtlKey),
                               sizeof(MaterialKey));
                 writer->write(areaLightID);
