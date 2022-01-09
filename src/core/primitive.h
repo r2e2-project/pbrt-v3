@@ -50,8 +50,7 @@ namespace pbrt {
 enum class PrimitiveType {
     Geometric,
     Transformed,
-    Aggregate,
-    Proxy
+    Aggregate
 };
 
 // Primitive Declarations
