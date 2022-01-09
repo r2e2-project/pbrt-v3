@@ -10,22 +10,25 @@
 namespace pbrt {
 
 class ProxyBVH : public Aggregate {
-public:
-    ProxyBVH(const Bounds3f &bounds, uint64_t size,
-             const std::string &name, uint64_t nodeCount,
-             std::vector<const ProxyBVH *> &&deps)
-        : bounds_(bounds), size_(size),
-          name_(name), nodeCount_(nodeCount),
+  public:
+    ProxyBVH(const Bounds3f &bounds, uint64_t size, const std::string &name,
+             uint64_t nodeCount, std::vector<const ProxyBVH *> &&deps)
+        : bounds_(bounds),
+          size_(size),
+          name_(name),
+          nodeCount_(nodeCount),
           dependencies_(move(deps)),
-          numIncludes_(1)
-    {}
+          numIncludes_(1) {}
 
     Bounds3f WorldBound() const { return bounds_; }
     uint64_t Size() const { return size_; }
     std::string Name() const { return name_; }
     uint64_t nodeCount() const { return nodeCount_; }
-    const std::vector<const ProxyBVH *> & Dependencies() const { return dependencies_; }
-    std::vector<std::pair<uint32_t, std::unique_ptr<FileRecordReader>>> GetReaders() const;
+    const std::vector<const ProxyBVH *> &Dependencies() const {
+        return dependencies_;
+    }
+    std::vector<std::pair<uint32_t, std::unique_ptr<FileRecordReader>>>
+    GetReaders() const;
     uint64_t UsageCount() const { return numIncludes_; }
     void IncrUsage() { numIncludes_++; }
 
@@ -36,7 +39,9 @@ public:
         throw std::runtime_error("IntersectP called on proxy");
     }
 
-private:
+    PrimitiveType GetType() const { return PrimitiveType::Proxy; }
+
+  private:
     Bounds3f bounds_;
     uint64_t size_;
     std::string name_;
@@ -45,6 +50,6 @@ private:
     uint64_t numIncludes_;
 };
 
-}
+}  // namespace pbrt
 
 #endif
