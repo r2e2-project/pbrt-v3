@@ -346,9 +346,10 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
     // find the start and the end of the buffer for meshes
     for (int i = 0; i < num_triangle_meshes; ++i) {
+        MaterialKey material_key;
+
         const uint64_t tm_id = reader->read<uint64_t>();
-        reader->read<bool>();  // skip over is instance mesh
-        const MaterialKey material_key = reader->read<MaterialKey>();
+        reader->read(&material_key);
         const uint32_t area_light_id = reader->read<uint32_t>();
 
         const size_t len = reader->next_record_size();

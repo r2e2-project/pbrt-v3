@@ -23,7 +23,6 @@ std::string RecordReader::read() {
 }
 
 template pbrt::MaterialKey RecordReader::read<pbrt::MaterialKey>();
-template bool RecordReader::read<bool>();
 template uint32_t RecordReader::read<uint32_t>();
 template uint64_t RecordReader::read<uint64_t>();
 
