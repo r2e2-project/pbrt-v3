@@ -260,6 +260,13 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
         auto Li = p.Lookup(r.imageSampleInfo.uv);
         r.Ld *= Li;
         output.sample = move(rayStatePtr);
+
+        if (r.toVisitEmpty() and !r.HasHit() and not r.IsLightRay() and
+            not r.IsShadowRay() and
+            r.remainingBounces == sceneBase.maxPathDepth - 1) {
+            output.pathFinished = true;
+        }
+
         return;
     } else {
         throw runtime_error("ProcessRay: invalid ray");
