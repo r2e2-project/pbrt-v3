@@ -261,9 +261,9 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
         r.Ld *= Li;
         output.sample = move(rayStatePtr);
 
-        if (r.toVisitEmpty() and !r.HasHit() and not r.IsLightRay() and
-            not r.IsShadowRay() and
-            r.remainingBounces == sceneBase.maxPathDepth - 1) {
+        if ((r.IsShadowRay() and r.remainingBounces == 0) ||
+            (not r.IsShadowRay() and not r.IsLightRay() and
+             r.remainingBounces == sceneBase.maxPathDepth - 1)) {
             output.pathFinished = true;
         }
 
@@ -360,9 +360,12 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
                         ray.imageSampleInfo.treelet = img.first;
                         ray.imageSampleInfo.imageId = img.second;
                         output.rays[0] = move(tracedRay);
+                        sampleDone = false;
+                    } else {
+                        ray.Ld = 0.f;
+                        sampleDone = true;
                     }
 
-                    sampleDone = false;
                     break;
                 } else {
                     ray.Ld += light->Le(ray.ray);
