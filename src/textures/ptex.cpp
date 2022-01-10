@@ -124,7 +124,7 @@ PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
         size_t maxMem = 1ull << 32;  // 4GB
 
         if (global::manager.hasInMemoryTextures()) {
-            maxFiles = 1'000;
+            maxFiles = 100;
             maxMem = 1ull << 30;  // 1GB
         }
 
