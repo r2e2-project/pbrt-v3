@@ -64,6 +64,18 @@ void print_treelet_info(const uint32_t treelet_id) {
                                                treelet_buffer.size());
     }
 
+    map<string, size_t> tex_sizes;
+    map<uint32_t, string> stex_texs, ftex_texs;
+
+    size_t total_image_partition_size = 0;
+    const uint32_t included_image_partitions = reader->read<uint32_t>();
+    for (size_t i = 0; i < included_image_partitions; i++) {
+        const uint32_t id = reader->read<uint32_t>();
+        const auto l = reader->next_record_size();
+        reader->read<string>();
+        total_image_partition_size += l;
+    }
+
     size_t total_texture_size = 0;
     const uint32_t included_texture_count = reader->read<uint32_t>();
     for (size_t i = 0; i < included_texture_count; i++) {
@@ -71,38 +83,83 @@ void print_treelet_info(const uint32_t treelet_id) {
         const auto l = reader->next_record_size();
         reader->read<string>();
         total_texture_size += l;
+        tex_sizes[_manager.getFileName(ObjectType::Texture, id)] = l;
+
+        cerr << "T" << treelet_id << " TEX" << id << " " << l << endl;
     }
 
     size_t total_spectrum_size = 0;
     const uint32_t included_spectrum_count = reader->read<uint32_t>();
     for (size_t i = 0; i < included_spectrum_count; i++) {
         const uint32_t id = reader->read<uint32_t>();
-        const auto l = reader->next_record_size();
-        reader->read<string>();
-        total_spectrum_size += l;
+        const auto data = reader->read<string>();
+        total_spectrum_size += data.length();
+
+        protobuf::SpectrumTexture stex_proto;
+        stex_proto.ParseFromString(data);
+        auto& params = stex_proto.params();
+        for (size_t j = 0; j < params.strings_size(); j++) {
+            if (params.strings(j).name() == "filename") {
+                stex_texs[id] = params.strings(j).values(0);
+                break;
+            }
+        }
     }
 
     size_t total_float_size = 0;
     const uint32_t included_float_count = reader->read<uint32_t>();
     for (size_t i = 0; i < included_float_count; i++) {
         const uint32_t id = reader->read<uint32_t>();
-        const auto l = reader->next_record_size();
-        reader->read<string>();
-        total_float_size += l;
+        const auto data = reader->read<string>();
+        total_float_size += data.length();
+
+        protobuf::FloatTexture ftex_proto;
+        ftex_proto.ParseFromString(data);
+        auto& params = ftex_proto.params();
+        for (size_t j = 0; j < params.strings_size(); j++) {
+            if (params.strings(j).name() == "filename") {
+                ftex_texs[id] = params.strings(j).values(0);
+                break;
+            }
+        }
     }
 
     size_t total_material_size = 0;
     const uint32_t included_material_count = reader->read<uint32_t>();
     for (size_t i = 0; i < included_material_count; i++) {
         const uint32_t id = reader->read<uint32_t>();
-        const auto l = reader->next_record_size();
-        reader->read<string>();
-        total_material_size += l;
+        const auto data = reader->read<string>();
+        total_material_size += data.length();
+
+        protobuf::Material mat_proto;
+        mat_proto.ParseFromString(data);
+
+        vector<string> texture_key;
+
+        for (auto& tex : mat_proto.spectrum_textures()) {
+            if (stex_texs.count(tex.second)) {
+                texture_key.push_back(stex_texs[tex.second]);
+            }
+        }
+
+        for (auto& tex : mat_proto.float_textures()) {
+            if (ftex_texs.count(tex.second)) {
+                texture_key.push_back(ftex_texs[tex.second]);
+            }
+        }
+
+        sort(texture_key.begin(), texture_key.end());
+
+        cerr << "T" << treelet_id << " MAT" << id << " " << data.length();
+        for (const auto& t : texture_key) cerr << " " << t;
+        cerr << endl;
     }
 
     const uint32_t included_mesh_count = reader->read<uint32_t>();
 
-    cout << "\u21b3 TEX:  " << included_texture_count << "  \033[38;5;242m"
+    cout << "\u21b3 PART: " << included_image_partitions << "  \033[38;5;242m"
+         << format_bytes(total_image_partition_size) << "\033[0m" << endl
+         << "\u21b3 TEX:  " << included_texture_count << "  \033[38;5;242m"
          << format_bytes(total_texture_size) << "\033[0m" << endl
          << "\u21b3 STEX: " << included_spectrum_count << "  \033[38;5;242m"
          << format_bytes(total_spectrum_size) << "\033[0m" << endl
