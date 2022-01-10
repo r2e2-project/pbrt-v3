@@ -201,6 +201,9 @@ struct RenderOptions {
     std::vector<protobuf::Light> protoLights;
     std::vector<protobuf::AreaLight> protoAreaLights;
     std::vector<protobuf::InfiniteLight> protoInfiniteLights;
+
+    // transform the scene
+    std::unique_ptr<Transform> sceneTransform = nullptr;
 };
 
 // MaterialInstance represents both an instance of a material as well as
@@ -983,6 +986,12 @@ void pbrtInit(const Options &opt) {
     graphicsState = GraphicsState();
     catIndentCount = 0;
 
+    // Initialize the transform, if necessary
+    if (opt.translate[0] || opt.translate[1] || opt.translate[2]) {
+        renderOptions->sceneTransform = std::make_unique<Transform>(Translate(
+            Vector3f(opt.translate[0], opt.translate[1], opt.translate[2])));
+    }
+
     // General \pbrt Initialization
     SampledSpectrum::Init();
     ParallelInit();  // Threads must be launched before the profiler is
@@ -1494,8 +1503,18 @@ void pbrtShape(const std::string &name, const ParamSet &params) {
         // Initialize _prims_ and _areaLights_ for static shape
 
         // Create shapes for shape _name_
-        Transform *ObjToWorld = transformCache.Lookup(curTransform[0]);
-        Transform *WorldToObj = transformCache.Lookup(Inverse(curTransform[0]));
+        Transform *ObjToWorld;
+        Transform *WorldToObj;
+
+        if (renderOptions->sceneTransform && !renderOptions->currentInstance) {
+            const auto t = *(renderOptions->sceneTransform) * curTransform[0];
+            ObjToWorld = transformCache.Lookup(t);
+            WorldToObj = transformCache.Lookup(Inverse(t));
+        } else {
+            ObjToWorld = transformCache.Lookup(curTransform[0]);
+            WorldToObj = transformCache.Lookup(Inverse(curTransform[0]));
+        }
+
         std::vector<std::shared_ptr<Shape>> shapes =
             MakeShapes(name, ObjToWorld, WorldToObj,
                        graphicsState.reverseOrientation, params);
@@ -1771,10 +1790,18 @@ void pbrtObjectInstance(const std::string &name) {
     static_assert(MaxTransforms == 2,
                   "TransformCache assumes only two transforms");
     // Create _animatedInstanceToWorld_ transform for instance
-    Transform *InstanceToWorld[2] = {
-        transformCache.Lookup(curTransform[0]),
-        transformCache.Lookup(curTransform[1])
-    };
+    Transform *InstanceToWorld[2];
+
+    if (renderOptions->sceneTransform) {
+        const auto &t = *(renderOptions->sceneTransform);
+        InstanceToWorld[0] = transformCache.Lookup(t * curTransform[0]);
+        InstanceToWorld[1] = transformCache.Lookup(t * curTransform[1]);
+    }
+    else {
+        InstanceToWorld[0] = transformCache.Lookup(curTransform[0]);
+        InstanceToWorld[1] = transformCache.Lookup(curTransform[1]);
+    }
+
     AnimatedTransform animatedInstanceToWorld(
         InstanceToWorld[0], renderOptions->transformStartTime,
         InstanceToWorld[1], renderOptions->transformEndTime);

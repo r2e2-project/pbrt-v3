@@ -174,6 +174,8 @@ struct Options {
         cropWindow[0][1] = 1;
         cropWindow[1][0] = 0;
         cropWindow[1][1] = 1;
+
+        translate[0] = translate[1] = translate[2] = 0;
     }
     int nThreads = 0;
     bool quickRender = false;
@@ -191,6 +193,7 @@ struct Options {
     Float cropWindow[2][2];
     std::string proxyDir {};
     bool noStats = false;
+    Float translate[3];
 };
 
 extern Options PbrtOptions;

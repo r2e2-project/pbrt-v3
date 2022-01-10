@@ -76,6 +76,7 @@ Cloud:
   --nomaterial         Don't dump the texture information
   --proxydir           Where to find proxies 
   --nostats            Don't print pbrt stats at the end
+  --translate <x,y,z>  Translate the scene
 
 )");
     exit(msg ? 1 : 0);
@@ -172,6 +173,13 @@ int main(int argc, char *argv[]) {
             options.proxyDir = std::string(argv[i] + 11);
         } else if (!strcmp(argv[i], "--nostats")) {
             options.noStats = true;
+        } else if (!strcmp(argv[i], "--translate") ||
+                   !strcmp(argv[i], "-translate")) {
+            if (i + 3 >= argc)
+                usage("missing value after --translate argument");
+            options.translate[0] = atof(argv[++i]);
+            options.translate[1] = atof(argv[++i]);
+            options.translate[2] = atof(argv[++i]);
         } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-help") ||
                    !strcmp(argv[i], "-h")) {
             usage();
