@@ -2566,7 +2566,8 @@ void TreeletDumpBVH::DumpMaterials() const {
         bool allotted = false;
 
         for (auto &treelet : treelets) {
-            if (treelet.size + tk.second <= maxTreeletBytes) {
+            if (treelet.size + tk.second <= maxTreeletBytes &&
+                treelet.textureKeys.size() < 150) {
                 treelet.textureKeys.push_back(tk.first);
                 treelet.size += tk.second;
                 allotted = true;
