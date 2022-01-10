@@ -2452,12 +2452,16 @@ void TreeletDumpBVH::DumpMaterials() const {
 
     cout << "Dumping materials started." << endl;
 
+    // XXX well...
+    const auto maxMaterialTreeletBytes = 3 * maxTreeletBytes / 4;
+
     for (auto mtlId : _manager.getAllMaterialIds()) {
         auto textureSize = getTotalTextureSize(mtlId);
 
-        if (textureSize > maxTreeletBytes) {
+        if (textureSize > maxMaterialTreeletBytes) {
             // we need to turn this material into a compound material
-            auto newMtlIds = generateTexturePartitions(mtlId, maxTreeletBytes);
+            auto newMtlIds =
+                generateTexturePartitions(mtlId, maxMaterialTreeletBytes);
             for (const auto i : newMtlIds) {
                 texturedMaterials.emplace_back(i, getTotalTextureSize(i));
             }
@@ -2566,7 +2570,7 @@ void TreeletDumpBVH::DumpMaterials() const {
         bool allotted = false;
 
         for (auto &treelet : treelets) {
-            if (treelet.size + tk.second <= maxTreeletBytes &&
+            if (treelet.size + tk.second <= maxMaterialTreeletBytes &&
                 treelet.textureKeys.size() < 150) {
                 treelet.textureKeys.push_back(tk.first);
                 treelet.size += tk.second;
