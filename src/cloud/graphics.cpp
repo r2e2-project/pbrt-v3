@@ -229,6 +229,10 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
 
     output.pathId = r.PathID();
     output.pathFinished = false;
+    output.rays[0] = nullptr;
+    output.rays[1] = nullptr;
+    output.rays[2] = nullptr;
+    output.sample = nullptr;
 
     RayStatePtr tracedRay;
 

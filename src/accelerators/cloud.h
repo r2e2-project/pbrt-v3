@@ -11,7 +11,6 @@
 #include <stdexcept>
 #include <vector>
 
-#include "cloud/manager.h"
 #include "material.h"
 #include "paramset.h"
 #include "pbrt.h"
