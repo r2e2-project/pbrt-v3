@@ -1727,7 +1727,7 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
 
             const uint64_t newId = _manager.getNextId(ObjectType::TriangleMesh);
             writer->write(static_cast<uint64_t>(newId));
-            writer->write(materialKeyRemap.at(matKey));
+            writer->write(matKey.id ? materialKeyRemap.at(matKey) : matKey);
             writer->write(areaLightId);
             writer->write(storage.get(), len);
 
