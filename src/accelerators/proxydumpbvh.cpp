@@ -1516,7 +1516,6 @@ void ProxyDumpBVH::DumpImagePartitions() const {
     };
 
     vector<ImagePartitionTreelet> treelets;
-    treelets.emplace_back(_manager.getNextId(ObjectType::Treelet));
     sort(partitions.begin(), partitions.end(),
          [](const auto &a, const auto &b) { return a.second > b.second; });
 
