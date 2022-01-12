@@ -544,9 +544,9 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
 
     protobuf::EnvironmentMap proto_envmap;
 
-    // constexpr size_t MAX_PARTITION_SIZE = 1024 * 1024 * 1025; /* 1 GB */
-    constexpr size_t MAX_PARTITION_SIZE = 8 * 1024 * 1024;   /* 8 MB */
-    constexpr size_t MAX_DOWNSAMPLED_SIZE = 1 * 1024 * 1024; /* 1 MB */
+    constexpr size_t MAX_PARTITION_SIZE = 1024 * 1024 * 1024; /* 1 GB */
+    // constexpr size_t MAX_PARTITION_SIZE = 8 * 1024 * 1024;   /* 8 MB */
+    constexpr size_t MAX_DOWNSAMPLED_SIZE = 4 * 1024 * 1024; /* 4 MB */
 
     Point2i resolution;
     auto map = ReadImage(texmap, &resolution);
