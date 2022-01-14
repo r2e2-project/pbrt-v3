@@ -194,6 +194,9 @@ struct Options {
     std::string proxyDir {};
     bool noStats = false;
     Float translate[3];
+
+    size_t ptexCacheMaxMem = 0;
+    int ptexCacheMaxFiles = 0;
 };
 
 extern Options PbrtOptions;

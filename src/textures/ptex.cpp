@@ -128,6 +128,14 @@ PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
             maxMem = 1ull << 30;  // 1GB
         }
 
+        if (PbrtOptions.ptexCacheMaxFiles) {
+            maxFiles = PbrtOptions.ptexCacheMaxFiles;
+        }
+
+        if (PbrtOptions.ptexCacheMaxMem) {
+            maxMem = (1ull << 30) * PbrtOptions.ptexCacheMaxMem;
+        }
+
         bool premultiply = true;
 
         cache = Ptex::PtexCache::create(maxFiles, maxMem, premultiply,

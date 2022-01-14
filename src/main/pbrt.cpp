@@ -78,6 +78,9 @@ Cloud:
   --nostats            Don't print pbrt stats at the end
   --translate <x,y,z>  Translate the scene
 
+  --ptexmem <num>      Ptex cache maximum memory (GB)
+  --ptexfiles <num>    Ptex cache maximum number of open files
+
 )");
     exit(msg ? 1 : 0);
 }
@@ -180,6 +183,20 @@ int main(int argc, char *argv[]) {
             options.translate[0] = atof(argv[++i]);
             options.translate[1] = atof(argv[++i]);
             options.translate[2] = atof(argv[++i]);
+        } else if (!strcmp(argv[i], "--ptexmem") ||
+                   !strcmp(argv[i], "-ptexmem")) {
+            if (i + 1 == argc)
+                usage("missing value after --ptexmem argument");
+            options.ptexCacheMaxMem = atoi(argv[++i]);
+        } else if (!strncmp(argv[i], "--ptexmem=", 4)) {
+            options.ptexCacheMaxMem = atoi(argv[i] + 4);
+        } else if (!strcmp(argv[i], "--ptexfiles") ||
+                   !strcmp(argv[i], "-ptexfiles")) {
+            if (i + 1 == argc)
+                usage("missing value after --ptexfiles argument");
+            options.ptexCacheMaxFiles = atoi(argv[++i]);
+        } else if (!strncmp(argv[i], "--ptexfiles=", 4)) {
+            options.ptexCacheMaxFiles = atoi(argv[i] + 4);
         } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-help") ||
                    !strcmp(argv[i], "-h")) {
             usage();
