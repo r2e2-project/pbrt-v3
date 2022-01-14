@@ -2038,9 +2038,13 @@ Scene *RenderOptions::MakeScene() {
     allAcceleratorParams.AddBool("sceneaccelerator", std::move(scene_accelerator_val), 1);
 
     __timepoints.accelerator_creation_start = TimePoints::clock::now();
+    std::shared_ptr<Primitive> accelerator;
 
     /* Do we need to dump the lights? */
     if (PbrtOptions.dumpScene) {
+        accelerator = MakeAccelerator(AcceleratorName, std::move(primitives),
+                                      allAcceleratorParams);
+
         // let's dump the lights
         auto writer = _manager.GetWriter(ObjectType::Lights);
         for (const auto &light : renderOptions->protoLights) {
@@ -2108,8 +2112,10 @@ Scene *RenderOptions::MakeScene() {
         }
     }
 
-    std::shared_ptr<Primitive> accelerator = MakeAccelerator(
-        AcceleratorName, std::move(primitives), allAcceleratorParams);
+    if (!PbrtOptions.dumpScene) {
+        accelerator = MakeAccelerator(AcceleratorName, std::move(primitives),
+                                      allAcceleratorParams);
+    }
 
     if (PbrtOptions.loadScene) {
         // loading infinite lights
