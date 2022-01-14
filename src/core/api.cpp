@@ -877,7 +877,7 @@ std::shared_ptr<Primitive> MakeAccelerator(
     else if (name == "kdtree")
         accel = CreateKdTreeAccelerator(std::move(prims), paramSet);
     else if (name == "cloudbvh")
-        accel = CreateCloudBVH(paramSet);
+        accel = CreateCloudBVH(paramSet, renderOptions->lights);
     else if (name == "treeletdumpbvh")
         accel = CreateTreeletDumpBVH(std::move(prims), paramSet);
     else if (name == "proxydumpbvh")
@@ -2037,13 +2037,6 @@ Scene *RenderOptions::MakeScene() {
     scene_accelerator_val[0] = true;
     allAcceleratorParams.AddBool("sceneaccelerator", std::move(scene_accelerator_val), 1);
 
-    __timepoints.accelerator_creation_start = TimePoints::clock::now();
-    std::shared_ptr<Primitive> accelerator =
-        MakeAccelerator(AcceleratorName, std::move(primitives), allAcceleratorParams);
-    __timepoints.accelerator_creation_end = TimePoints::clock::now();
-
-    if (!accelerator) accelerator = std::make_shared<BVHAccel>(primitives);
-
     /* Do we need to dump the lights? */
     if (PbrtOptions.dumpScene) {
         // let's dump the lights
@@ -2069,8 +2062,51 @@ Scene *RenderOptions::MakeScene() {
             writer->write(ilight);
         }
     } else if (PbrtOptions.loadScene) {
+        MediumInterface mi = graphicsState.CreateMediumInterface();
+
+        // loading area lights
+        auto reader = _manager.GetReader(ObjectType::AreaLights);
+        while (!reader->eof()) {
+            protobuf::AreaLight proto_light;
+            reader->read(&proto_light);
+
+            // let's create the triangle mesh for the light
+            std::shared_ptr<char> meshStorage{
+                new char[proto_light.mesh_data().size()],
+                std::default_delete<char[]>()};
+
+            memcpy(meshStorage.get(), &proto_light.mesh_data()[0],
+                   proto_light.mesh_data().size());
+
+            auto lightMesh = std::make_shared<TriangleMesh>(meshStorage, 0);
+            auto lightParams = from_protobuf(proto_light.light().paramset());
+            auto lightTrans =
+                from_protobuf(proto_light.light().light_to_world());
+
+            for (size_t i = 0; i < lightMesh->nTriangles; i++) {
+                auto lightShape = std::make_shared<Triangle>(
+                    transformCache.Lookup(Transform()),
+                    transformCache.Lookup(Transform()), false, lightMesh, i);
+
+                lights.emplace_back(CreateDiffuseAreaLight(
+                    lightTrans, mi.outside, lightParams, lightShape));
+            }
+        }
+
+        // loading normal lights
+        reader = _manager.GetReader(ObjectType::Lights);
+        while (!reader->eof()) {
+            protobuf::Light proto_light;
+            reader->read(&proto_light);
+            lights.push_back(move(light::from_protobuf(proto_light)));
+        }
+
+        for (uint32_t i = 0; i < lights.size(); i++) {
+            lights[i]->SetID(i + 1);
+        }
+
         // loading infinite lights
-        auto reader = _manager.GetReader(ObjectType::InfiniteLights);
+        reader = _manager.GetReader(ObjectType::InfiniteLights);
         while (!reader->eof()) {
             protobuf::InfiniteLight proto;
             reader->read(&proto);
@@ -2101,6 +2137,13 @@ Scene *RenderOptions::MakeScene() {
             lights.emplace_back(std::move(pLight));
         }
     }
+
+    __timepoints.accelerator_creation_start = TimePoints::clock::now();
+    std::shared_ptr<Primitive> accelerator = MakeAccelerator(
+        AcceleratorName, std::move(primitives), allAcceleratorParams);
+    __timepoints.accelerator_creation_end = TimePoints::clock::now();
+
+    if (!accelerator) accelerator = std::make_shared<BVHAccel>(primitives);
 
     Scene *scene = new Scene(accelerator, lights);
     // Erase primitives and lights from _RenderOptions_

@@ -53,7 +53,9 @@ class CloudBVH : public Aggregate {
         std::map<uint32_t, uint64_t> instances{};
     };
 
-    CloudBVH(const uint32_t bvh_root, const bool preload_all);
+    CloudBVH(
+        const uint32_t bvh_root, const bool preload_all,
+        const std::vector<std::shared_ptr<pbrt::Light>> *lights = nullptr);
     ~CloudBVH();
 
     CloudBVH(const CloudBVH &) = delete;
@@ -204,6 +206,8 @@ class CloudBVH : public Aggregate {
     mutable std::map<uint32_t, std::pair<ParamSet, Transform>>
         area_light_params_;
 
+    mutable std::vector<std::shared_ptr<pbrt::Light>> sceneLights{};
+
     void finalizeTreeletLoad(const uint32_t root_id) const;
     void loadTreeletBase(const uint32_t root_id, const char *buffer = nullptr,
                          size_t length = 0) const;
@@ -224,7 +228,8 @@ class CloudBVH : public Aggregate {
     std::shared_ptr<Texture<Float>> zeroAlphaTexture;
 };
 
-std::shared_ptr<CloudBVH> CreateCloudBVH(const ParamSet &ps);
+std::shared_ptr<CloudBVH> CreateCloudBVH(
+    const ParamSet &ps, const std::vector<std::shared_ptr<Light>> &lights);
 
 Vector3f ComputeRayDir(unsigned idx);
 unsigned ComputeIdx(const Vector3f &dir);

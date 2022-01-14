@@ -37,10 +37,15 @@ struct membuf : streambuf {
     membuf(char *begin, char *end) { this->setg(begin, begin, end); }
 };
 
-CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all)
+CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
+                   const vector<shared_ptr<Light>> *lights)
     : bvh_root_(bvh_root),
       zeroAlphaTexture(std::make_shared<ConstantTexture<Float>>(0.f)) {
     ProfilePhase _(Prof::AccelConstruction);
+
+    if (lights) {
+        sceneLights.insert(sceneLights.end(), lights->begin(), lights->end());
+    }
 
     if (MaxThreadIndex() > 1 && !preload_all) {
         throw runtime_error(
@@ -216,11 +221,17 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
         shared_ptr<AreaLight> area_light;
 
         if (u.area_light_id) {
-            auto &light_data = area_light_params_.at(u.area_light_id);
-            area_light = CreateDiffuseAreaLight(light_data.second,
-                                                medium_interface.outside,
-                                                light_data.first, u.shape);
-            area_light->SetID(u.area_light_id + u.triangle_idx);
+            if (sceneLights.empty()) {
+                auto &light_data = area_light_params_.at(u.area_light_id);
+                area_light = CreateDiffuseAreaLight(light_data.second,
+                                                    medium_interface.outside,
+                                                    light_data.first, u.shape);
+                area_light->SetID(u.area_light_id + u.triangle_idx);
+            }
+            else {
+                area_light = dynamic_pointer_cast<AreaLight>(
+                    sceneLights.at(u.area_light_id - 1));
+            }
         }
 
         treelet.primitives[u.primitive_index] = make_unique<GeometricPrimitive>(
@@ -807,8 +818,9 @@ void CloudBVH::clear() const {
     materials_.clear();
 }
 
-shared_ptr<CloudBVH> CreateCloudBVH(const ParamSet &ps) {
-    return make_shared<CloudBVH>(0, true);
+shared_ptr<CloudBVH> CreateCloudBVH(
+    const ParamSet &ps, const vector<shared_ptr<Light>> &sceneLights) {
+    return make_shared<CloudBVH>(0, true, &sceneLights);
 }
 
 Bounds3f CloudBVH::IncludedInstance::WorldBound() const {
