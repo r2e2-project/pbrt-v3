@@ -256,7 +256,6 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
     auto &treelet = *treelets_[root_id];
     auto &nodes = treelet.nodes;
-    auto &tree_meshes = treelet.meshes;
     auto &tree_primitives = treelet.primitives;
     auto &tree_transforms = treelet.transforms;
     auto &tree_instances = treelet.instances;
@@ -352,6 +351,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
             id, material::from_protobuf(material, ftexes, stexes));
     }
 
+    map<uint32_t, shared_ptr<TriangleMesh>> tree_meshes;
     map<uint32_t, MaterialKey> mesh_material_ids;
     map<uint32_t, uint32_t> mesh_area_light_id;
 

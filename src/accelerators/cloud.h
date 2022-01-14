@@ -151,9 +151,6 @@ class CloudBVH : public Aggregate {
         std::vector<std::unique_ptr<Transform>> transforms{};
         std::map<uint64_t, std::shared_ptr<Primitive>> instances{};
 
-        std::shared_ptr<char> mesh_storage{};
-        std::map<uint32_t, std::shared_ptr<TriangleMesh>> meshes{};
-
         std::set<MaterialKey> required_materials{};
         std::set<uint64_t> required_instances{};
 
