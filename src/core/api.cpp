@@ -2037,6 +2037,8 @@ Scene *RenderOptions::MakeScene() {
     scene_accelerator_val[0] = true;
     allAcceleratorParams.AddBool("sceneaccelerator", std::move(scene_accelerator_val), 1);
 
+    __timepoints.accelerator_creation_start = TimePoints::clock::now();
+
     /* Do we need to dump the lights? */
     if (PbrtOptions.dumpScene) {
         // let's dump the lights
@@ -2104,9 +2106,14 @@ Scene *RenderOptions::MakeScene() {
         for (uint32_t i = 0; i < lights.size(); i++) {
             lights[i]->SetID(i + 1);
         }
+    }
 
+    std::shared_ptr<Primitive> accelerator = MakeAccelerator(
+        AcceleratorName, std::move(primitives), allAcceleratorParams);
+
+    if (PbrtOptions.loadScene) {
         // loading infinite lights
-        reader = _manager.GetReader(ObjectType::InfiniteLights);
+        auto reader = _manager.GetReader(ObjectType::InfiniteLights);
         while (!reader->eof()) {
             protobuf::InfiniteLight proto;
             reader->read(&proto);
@@ -2137,10 +2144,7 @@ Scene *RenderOptions::MakeScene() {
             lights.emplace_back(std::move(pLight));
         }
     }
-
-    __timepoints.accelerator_creation_start = TimePoints::clock::now();
-    std::shared_ptr<Primitive> accelerator = MakeAccelerator(
-        AcceleratorName, std::move(primitives), allAcceleratorParams);
+    
     __timepoints.accelerator_creation_end = TimePoints::clock::now();
 
     if (!accelerator) accelerator = std::make_shared<BVHAccel>(primitives);
