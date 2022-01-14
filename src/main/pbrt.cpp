@@ -188,15 +188,15 @@ int main(int argc, char *argv[]) {
             if (i + 1 == argc)
                 usage("missing value after --ptexmem argument");
             options.ptexCacheMaxMem = atoi(argv[++i]);
-        } else if (!strncmp(argv[i], "--ptexmem=", 4)) {
-            options.ptexCacheMaxMem = atoi(argv[i] + 4);
+        } else if (!strncmp(argv[i], "--ptexmem=", 10)) {
+            options.ptexCacheMaxMem = atoi(argv[i] + 10);
         } else if (!strcmp(argv[i], "--ptexfiles") ||
                    !strcmp(argv[i], "-ptexfiles")) {
             if (i + 1 == argc)
                 usage("missing value after --ptexfiles argument");
             options.ptexCacheMaxFiles = atoi(argv[++i]);
-        } else if (!strncmp(argv[i], "--ptexfiles=", 4)) {
-            options.ptexCacheMaxFiles = atoi(argv[i] + 4);
+        } else if (!strncmp(argv[i], "--ptexfiles=", 12)) {
+            options.ptexCacheMaxFiles = atoi(argv[i] + 12);
         } else if (!strcmp(argv[i], "--help") || !strcmp(argv[i], "-help") ||
                    !strcmp(argv[i], "-h")) {
             usage();
