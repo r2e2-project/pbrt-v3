@@ -44,7 +44,9 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
     ProfilePhase _(Prof::AccelConstruction);
 
     if (lights) {
-        sceneLights.insert(sceneLights.end(), lights->begin(), lights->end());
+        for (auto &light : *lights) {
+            sceneLights.push_back(light.get());
+        }
     }
 
     if (MaxThreadIndex() > 1 && !preload_all) {
@@ -227,10 +229,11 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
                                                     medium_interface.outside,
                                                     light_data.first, u.shape);
                 area_light->SetID(u.area_light_id + u.triangle_idx);
-            }
-            else {
-                area_light = dynamic_pointer_cast<AreaLight>(
-                    sceneLights.at(u.area_light_id - 1));
+            } else {
+                area_light = shared_ptr<AreaLight>(
+                    dynamic_cast<AreaLight *>(
+                        sceneLights.at(u.area_light_id - 1)),
+                    [](auto p) {});
             }
         }
 

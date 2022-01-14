@@ -206,7 +206,7 @@ class CloudBVH : public Aggregate {
     mutable std::map<uint32_t, std::pair<ParamSet, Transform>>
         area_light_params_;
 
-    mutable std::vector<std::shared_ptr<pbrt::Light>> sceneLights{};
+    mutable std::vector<pbrt::Light *> sceneLights{};
 
     void finalizeTreeletLoad(const uint32_t root_id) const;
     void loadTreeletBase(const uint32_t root_id, const char *buffer = nullptr,
