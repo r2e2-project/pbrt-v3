@@ -53,9 +53,8 @@ class CloudBVH : public Aggregate {
         std::map<uint32_t, uint64_t> instances{};
     };
 
-    CloudBVH(
-        const uint32_t bvh_root, const bool preload_all,
-        const std::vector<std::shared_ptr<pbrt::Light>> *lights = nullptr);
+    CloudBVH(const uint32_t bvh_root, const bool preload_all,
+             const std::vector<std::shared_ptr<pbrt::Light>> *lights = nullptr);
     ~CloudBVH();
 
     CloudBVH(const CloudBVH &) = delete;
@@ -141,6 +140,12 @@ class CloudBVH : public Aggregate {
               area_light_id(area_light_id),
               shape(std::move(shape)),
               triangle_idx(triangle_idx) {}
+
+        UnfinishedGeometricPrimitive(UnfinishedGeometricPrimitive &&) = default;
+        UnfinishedGeometricPrimitive(const UnfinishedGeometricPrimitive &) =
+            delete;
+        UnfinishedGeometricPrimitive &operator=(
+            const UnfinishedGeometricPrimitive &) = delete;
     };
 
     struct Treelet {
@@ -155,7 +160,8 @@ class CloudBVH : public Aggregate {
         std::set<uint64_t> required_instances{};
 
         std::vector<UnfinishedTransformedPrimitive> unfinished_transformed{};
-        std::vector<UnfinishedGeometricPrimitive> unfinished_geometric{};
+        std::vector<std::unique_ptr<UnfinishedGeometricPrimitive>>
+            unfinished_geometric{};
     };
 
     class IncludedInstance : public Aggregate {

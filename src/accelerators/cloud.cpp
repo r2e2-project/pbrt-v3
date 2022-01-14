@@ -218,10 +218,11 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
 
     MediumInterface medium_interface{};
 
-    for (auto &u : treelet.unfinished_geometric) {
+    for (auto &ug : treelet.unfinished_geometric) {
         /* do we need to make an area light for this guy? */
         shared_ptr<AreaLight> area_light;
 
+        auto &u = *ug;
         if (u.area_light_id) {
             if (sceneLights.empty()) {
                 auto &light_data = area_light_params_.at(u.area_light_id);
@@ -238,7 +239,7 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
         }
 
         treelet.primitives[u.primitive_index] = make_unique<GeometricPrimitive>(
-            move(u.shape), materials_[u.material_key.id], area_light,
+            u.shape, materials_[u.material_key.id], area_light,
             medium_interface);
     }
 
@@ -459,9 +460,10 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                 &identity_transform_, &identity_transform_, false,
                 tree_meshes.at(mesh_id), tri_number);
 
-            treelet.unfinished_geometric.emplace_back(
-                tree_primitives.size(), material_key, area_light_id,
-                move(shape), i);
+            treelet.unfinished_geometric.push_back(
+                make_unique<UnfinishedGeometricPrimitive>(
+                    tree_primitives.size(), material_key, area_light_id,
+                    move(shape), i));
 
             tree_primitives.push_back(nullptr);
         }
