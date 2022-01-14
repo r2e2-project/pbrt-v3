@@ -24,6 +24,7 @@ def compress_one_treelet(name, src_dir, tmp_dir, dst_dir):
         return shutil.move(tmp_name, dst_name)
     else:
         print(f"{name} -> not compressed")
+        os.remove(tmp_name)
         return shutil.copy(src_name, dst_name)
 
 
