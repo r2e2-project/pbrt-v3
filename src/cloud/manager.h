@@ -159,9 +159,9 @@ class SceneManager {
         inMemoryTextures.emplace(path, make_pair(std::move(data), length));
     }
 
-    std::pair<std::shared_ptr<char>, size_t> getInMemoryTexture(
-        const std::string& path) {
-        return inMemoryTextures.at(path);
+    std::pair<char*, size_t> getInMemoryTexture(const std::string& path) {
+        auto& tex = inMemoryTextures.at(path);
+        return {tex.first.get(), tex.second};
     }
 
     bool hasInMemoryTextures() const { return not inMemoryTextures.empty(); }

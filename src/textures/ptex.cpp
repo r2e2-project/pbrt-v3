@@ -64,10 +64,8 @@ struct : public PtexErrorHandler {
 class : public PtexInputHandler {
   public:
     Handle open(const char *path) override {
-        auto tex = global::manager.getInMemoryTexture(path);
-        openedTextures.emplace_back(
-            std::make_unique<OpenedTexture>(tex.first, tex.second));
-        return reinterpret_cast<Handle>(openedTextures.back().get());
+        auto t = global::manager.getInMemoryTexture(path);
+        return reinterpret_cast<Handle>(new OpenedTexture(t.first, t.second));
     }
 
     void seek(Handle handle, int64_t pos) override {
@@ -76,7 +74,7 @@ class : public PtexInputHandler {
 
     size_t read(void *buffer, size_t size, Handle handle) override {
         auto h = reinterpret_cast<OpenedTexture *>(handle);
-        auto ptr = h->data.get() + h->pos;
+        auto ptr = h->data + h->pos;
         size_t len = (h->pos + size > h->length) ? (h->length - h->pos) : size;
         if (len > 0) {
             memcpy(buffer, ptr, len);
@@ -86,12 +84,9 @@ class : public PtexInputHandler {
     }
 
     bool close(Handle handle) override {
-        for (auto it = openedTextures.begin(); it != openedTextures.end();
-             it++) {
-            if (it->get() == handle) {
-                openedTextures.erase(it);
-                return true;
-            }
+        if (handle) {
+            auto t = reinterpret_cast<OpenedTexture *>(handle);
+            delete t;
         }
 
         return false;
@@ -101,15 +96,14 @@ class : public PtexInputHandler {
 
   private:
     struct OpenedTexture {
-        OpenedTexture(const std::shared_ptr<char> &data, const size_t length)
+        OpenedTexture(const char *data, const size_t length)
             : data(data), length(length) {}
 
-        std::shared_ptr<char> data;
+        const char *data;
         size_t length;
         int64_t pos{0};
     };
 
-    std::list<std::unique_ptr<OpenedTexture>> openedTextures;
 } inMemoryInputHandler;
 
 }  // anonymous namespace
