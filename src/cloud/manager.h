@@ -1,6 +1,7 @@
 #ifndef PBRT_CLOUD_MANAGER_H
 #define PBRT_CLOUD_MANAGER_H
 
+#include <mutex>
 #include <string>
 #include <tuple>
 #include <type_traits>
@@ -154,6 +155,7 @@ class SceneManager {
 
     void addInMemoryTexture(const std::string& path,
                             std::shared_ptr<char>&& data, const size_t length) {
+        std::unique_lock<std::mutex> lock{mutex_};
         inMemoryTextures.emplace(path, make_pair(std::move(data), length));
     }
 
@@ -164,7 +166,9 @@ class SceneManager {
 
     bool hasInMemoryTextures() const { return not inMemoryTextures.empty(); }
 
+    // XXX needs to be thread safe
     void addInMemoryImagePartition(const uint32_t pid, ImagePartition&& data) {
+        std::unique_lock<std::mutex> lock{mutex_};
         inMemoryImagePartitions.emplace(pid, std::move(data));
     }
 
@@ -209,6 +213,8 @@ class SceneManager {
     std::map<uint32_t, uint32_t> materialToTreelet;
 
     std::map<ObjectID, std::set<ObjectKey>> treeletDependencies;
+
+    std::mutex mutex_;
 };
 
 namespace global {
