@@ -74,8 +74,9 @@ class : public PtexInputHandler {
 
     size_t read(void *buffer, size_t size, Handle handle) override {
         auto h = reinterpret_cast<OpenedTexture *>(handle);
-        auto ptr = h->data + h->pos;
-        size_t len = (h->pos + size > h->length) ? (h->length - h->pos) : size;
+        const auto ptr = h->data + h->pos;
+        const size_t len =
+            (h->pos + size > h->length) ? (h->length - h->pos) : size;
         if (len > 0) {
             memcpy(buffer, ptr, len);
             h->pos += len;
