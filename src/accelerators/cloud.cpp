@@ -115,6 +115,15 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
     }
 }
 
+void CloudBVH::checkIfTreeletIsLoaded(const uint32_t root_id) const {
+    if (preloading_done_ or
+        (treelets_.size() > root_id && treelets_.at(root_id) != nullptr)) {
+        return; /* this tree is already loaded */
+    }
+
+    throw runtime_error("treelet " + to_string(root_id) + " is not loaded");
+}
+
 const Material *CloudBVH::GetMaterial(const uint32_t material_id) const {
     return treelets_.at(bvh_root_)->included_material.at(material_id).get();
 }
@@ -123,14 +132,14 @@ Bounds3f CloudBVH::WorldBound() const {
     // The correctness of this function is only guaranteed for the root treelet
     CHECK_EQ(bvh_root_, 0);
 
-    LoadTreelet(bvh_root_);
+    checkIfTreeletIsLoaded(bvh_root_);
     return treelets_[bvh_root_]->nodes[0].bounds;
 }
 
 // Sums the full surface area for each root. Does not account for overlap
 // between roots
 Float CloudBVH::RootSurfaceAreas(Transform txfm) const {
-    LoadTreelet(bvh_root_);
+    checkIfTreeletIsLoaded(bvh_root_);
     CHECK_EQ(treelets_.size(), 1);
 
     Float area = 0;
@@ -159,7 +168,7 @@ Float CloudBVH::RootSurfaceAreas(Transform txfm) const {
 }
 
 Float CloudBVH::SurfaceAreaUnion() const {
-    LoadTreelet(bvh_root_);
+    checkIfTreeletIsLoaded(bvh_root_);
     CHECK_EQ(treelets_.size(), 1);
 
     Bounds3f boundUnion;
@@ -171,7 +180,7 @@ Float CloudBVH::SurfaceAreaUnion() const {
 }
 
 void CloudBVH::LoadTreelet(const uint32_t root_id, const char *buffer,
-                           const size_t length) const {
+                           const size_t length) {
     if (preloading_done_ or
         (treelets_.size() > root_id && treelets_[root_id] != nullptr)) {
         return; /* this tree is already loaded */
@@ -201,7 +210,7 @@ void CloudBVH::LoadTreelet(const uint32_t root_id, const char *buffer,
     finalizeTreeletLoad(root_id);
 }
 
-void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
+void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) {
     auto &treelet = *treelets_[root_id];
 
     /* fill in unfinished primitives */
@@ -245,7 +254,7 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
 }
 
 void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
-                               size_t length) const {
+                               size_t length) {
     ProfilePhase _(Prof::LoadTreelet);
 
     treelets_[root_id] = make_unique<Treelet>();
@@ -475,7 +484,8 @@ void CloudBVH::Trace(RayState &rayState) const {
     int dirIsNeg[3] = {invDir.x < 0, invDir.y < 0, invDir.z < 0};
 
     const uint32_t currentTreelet = rayState.toVisitTop().treelet;
-    LoadTreelet(currentTreelet); /* we don't load any other treelets */
+    checkIfTreeletIsLoaded(
+        currentTreelet); /* we don't load any other treelets */
 
     bool hasTransform = false;
     bool transformChanged = false;
@@ -653,7 +663,7 @@ bool CloudBVH::Intersect(const Ray &ray, SurfaceInteraction *isect,
 
     uint32_t prevTreelet = startTreelet;
     while (true) {
-        LoadTreelet(current.first);
+        checkIfTreeletIsLoaded(current.first);
         auto &treelet = *treelets_[current.first];
         auto &node = treelet.nodes[current.second];
 
@@ -717,7 +727,7 @@ bool CloudBVH::IntersectP(const Ray &ray, const uint32_t bvh_root) const {
 
     uint32_t prevTreelet = startTreelet;
     while (true) {
-        LoadTreelet(current.first);
+        checkIfTreeletIsLoaded(current.first);
         auto &treelet = *treelets_[current.first];
         auto &node = treelet.nodes[current.second];
 
@@ -758,7 +768,7 @@ bool CloudBVH::IntersectP(const Ray &ray, const uint32_t bvh_root) const {
     return false;
 }
 
-void CloudBVH::clear() const {
+void CloudBVH::clear() {
     treelets_.clear();
     bvh_instances_.clear();
     materials_.clear();

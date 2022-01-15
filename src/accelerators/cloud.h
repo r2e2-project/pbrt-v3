@@ -73,7 +73,7 @@ class CloudBVH : public Aggregate {
     void Trace(RayState &rayState) const;
 
     void LoadTreelet(const uint32_t root_id, const char *buffer = nullptr,
-                     const size_t length = 0) const;
+                     const size_t length = 0);
 
     const Material *GetMaterial(const uint32_t material_id) const;
 
@@ -206,19 +206,18 @@ class CloudBVH : public Aggregate {
     std::shared_ptr<Texture<Float>> zero_alpha_texture_{
         std::make_shared<ConstantTexture<Float>>(0.f)};
 
-    mutable std::vector<std::unique_ptr<Treelet>> treelets_{};
-    mutable std::map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_{};
-    mutable std::map<uint32_t, std::shared_ptr<Material>> materials_{};
-    mutable std::map<uint32_t, std::pair<ParamSet, Transform>>
-        area_light_params_{};
+    std::vector<std::unique_ptr<Treelet>> treelets_{};
+    std::map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_{};
+    std::map<uint32_t, std::shared_ptr<Material>> materials_{};
+    std::map<uint32_t, std::pair<ParamSet, Transform>> area_light_params_{};
+    std::vector<pbrt::Light *> scene_lights_{};
 
-    mutable std::vector<pbrt::Light *> scene_lights_{};
-
-    void finalizeTreeletLoad(const uint32_t root_id) const;
+    void finalizeTreeletLoad(const uint32_t root_id);
     void loadTreeletBase(const uint32_t root_id, const char *buffer = nullptr,
-                         size_t length = 0) const;
+                         size_t length = 0);
+    void checkIfTreeletIsLoaded(const uint32_t root_id) const;
 
-    void clear() const;
+    void clear();
 };
 
 std::shared_ptr<CloudBVH> CreateCloudBVH(
