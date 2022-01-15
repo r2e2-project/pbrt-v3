@@ -87,6 +87,7 @@ class : public PtexInputHandler {
         if (handle) {
             auto t = reinterpret_cast<OpenedTexture *>(handle);
             delete t;
+            return true;
         }
 
         return false;
