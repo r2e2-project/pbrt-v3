@@ -776,6 +776,10 @@ void CloudBVH::clear() {
 
 shared_ptr<CloudBVH> CreateCloudBVH(
     const ParamSet &ps, const vector<shared_ptr<Light>> &scene_lights_) {
+    // just to supress the warnings...
+    ps.FindOneBool("preload", false);
+    ps.FindOneBool("sceneaccelerator", false);
+
     return make_shared<CloudBVH>(0, true, &scene_lights_);
 }
 
