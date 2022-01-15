@@ -154,13 +154,17 @@ class SceneManager {
     size_t treeletCount();
 
     void addInMemoryTexture(const std::string& path,
-                            std::shared_ptr<char>&& data, const size_t length) {
-        std::unique_lock<std::mutex> lock{mutex_};
-        inMemoryTextures.emplace(path, make_pair(std::move(data), length));
+                            std::unique_ptr<char[]>&& data,
+                            const size_t length) {
+        std::lock_guard<std::mutex> lock{mutex_};
+        inMemoryTextures.emplace(
+            std::piecewise_construct, std::forward_as_tuple(path),
+            std::forward_as_tuple(std::move(data), length));
     }
 
-    std::pair<char*, size_t> getInMemoryTexture(const std::string& path) const {
-        auto& tex = inMemoryTextures.at(path);
+    std::pair<const char*, size_t> getInMemoryTexture(
+        const std::string& path) const {
+        const auto& tex = inMemoryTextures.at(path);
         return {tex.first.get(), tex.second};
     }
 
@@ -190,7 +194,7 @@ class SceneManager {
     std::map<ObjectKey, uint64_t> objectSizes{};
     std::map<ObjectKey, std::set<ObjectKey>> dependencies;
 
-    std::map<std::string, std::pair<std::shared_ptr<char>, size_t>>
+    std::unordered_map<std::string, std::pair<std::unique_ptr<char[]>, size_t>>
         inMemoryTextures;
 
     std::map<uint32_t, ImagePartition> inMemoryImagePartitions;
