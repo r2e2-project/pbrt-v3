@@ -529,9 +529,9 @@ void CloudBVH::Trace(RayState &rayState) const {
                             dynamic_cast<TransformedPrimitive *>(
                                 primitives[i].get());
 
-                        shared_ptr<ExternalInstance> cbvh =
-                            dynamic_pointer_cast<ExternalInstance>(
-                                tp->GetPrimitive());
+                        ExternalInstance *cbvh =
+                            dynamic_cast<ExternalInstance *>(
+                                tp->GetPrimitive().get());
 
                         if (cbvh) {
                             if (current.primitive + 1 < node.primitive_count) {
@@ -557,9 +557,9 @@ void CloudBVH::Trace(RayState &rayState) const {
                             break;
                         }
 
-                        shared_ptr<IncludedInstance> included =
-                            dynamic_pointer_cast<IncludedInstance>(
-                                tp->GetPrimitive());
+                        IncludedInstance *included =
+                            dynamic_cast<IncludedInstance *>(
+                                tp->GetPrimitive().get());
                         if (included) {
                             if (tp->Intersect(ray, &isect)) {
                                 if (isect.primitive->GetMaterial()->GetType() !=

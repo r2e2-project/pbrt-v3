@@ -203,6 +203,9 @@ class CloudBVH : public Aggregate {
     const uint32_t bvh_root_;
     bool preloading_done_{false};
 
+    Transform identity_transform_ {};
+    std::shared_ptr<Texture<Float>> zeroAlphaTexture;
+
     mutable std::vector<std::unique_ptr<Treelet>> treelets_;
     mutable std::map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_;
     mutable std::map<uint32_t, std::shared_ptr<Material>> materials_;
@@ -226,9 +229,6 @@ class CloudBVH : public Aggregate {
                          const int idx, const Treelet &currTreelet,
                          const TreeletNode &currNode,
                          std::vector<Bounds3f> &treeletBounds) const;
-
-    Transform identity_transform_;
-    std::shared_ptr<Texture<Float>> zeroAlphaTexture;
 };
 
 std::shared_ptr<CloudBVH> CreateCloudBVH(
