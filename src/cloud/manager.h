@@ -170,9 +170,8 @@ class SceneManager {
 
     bool hasInMemoryTextures() const { return not inMemoryTextures.empty(); }
 
-    // XXX needs to be thread safe
     void addInMemoryImagePartition(const uint32_t pid, ImagePartition&& data) {
-        std::unique_lock<std::mutex> lock{mutex_};
+        std::lock_guard<std::mutex> lock{mutex_};
         inMemoryImagePartitions.emplace(pid, std::move(data));
     }
 

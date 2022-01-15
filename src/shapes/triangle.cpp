@@ -32,13 +32,15 @@
 
 // shapes/triangle.cpp*
 #include "shapes/triangle.h"
-#include "texture.h"
-#include "textures/constant.h"
-#include "paramset.h"
-#include "sampling.h"
+
+#include <array>
+
 #include "efloat.h"
 #include "ext/rply.h"
-#include <array>
+#include "paramset.h"
+#include "sampling.h"
+#include "texture.h"
+#include "textures/constant.h"
 
 namespace pbrt {
 
@@ -55,8 +57,7 @@ TriangleMesh::TriangleMesh(
     const Transform &ObjectToWorld, int nTriangles, const int *vertexIndices_,
     int nVertices, const Point3f *P, const Vector3f *S, const Normal3f *N,
     const Point2f *UV, const std::shared_ptr<Texture<Float>> &alphaMask,
-    const std::shared_ptr<Texture<Float>> &shadowAlphaMask,
-    const int *fIndices)
+    const std::shared_ptr<Texture<Float>> &shadowAlphaMask, const int *fIndices)
     : nTriangles(nTriangles),
       nVertices(nVertices),
       alphaMask(alphaMask),
@@ -71,8 +72,7 @@ TriangleMesh::TriangleMesh(
     ++nMeshes;
     nTris += nTriangles;
 
-    buffer = std::shared_ptr<char>{new char[storageSize],
-                                   std::default_delete<char[]>()};
+    buffer = std::make_unique<char[]>(storageSize);
     storage = buffer.get();
 
     char *ptr = const_cast<char *>(storage);
@@ -121,14 +121,13 @@ TriangleMesh::TriangleMesh(
     }
 }
 
-TriangleMesh::TriangleMesh(const std::shared_ptr<char> &buffer,
-                           const size_t tm_offset)
-    : buffer(buffer),
+TriangleMesh::TriangleMesh(std::unique_ptr<char[]> &&b, const size_t tm_offset)
+    : buffer(move(b)),
       storage(buffer.get() + tm_offset),
       nTriangles(*reinterpret_cast<const int *>(storage)),
       nVertices(*reinterpret_cast<const int *>(storage + sizeof(int))),
       alphaMask(),
-      shadowAlphaMask(){
+      shadowAlphaMask() {
     char *ptr = const_cast<char *>(storage);
     size_t off = sizeof(int) * 2;
 
@@ -175,8 +174,7 @@ bool WritePlyFile(const std::string &filename, int nTriangles,
                   const int *faceIndices) {
     p_ply plyFile =
         ply_create(filename.c_str(), PLY_DEFAULT, PlyErrorCallback, 0, nullptr);
-    if (plyFile == nullptr)
-        return false;
+    if (plyFile == nullptr) return false;
 
     ply_add_element(plyFile, "vertex", nVertices);
     ply_add_scalar_property(plyFile, "x", PLY_FLOAT);
@@ -197,8 +195,7 @@ bool WritePlyFile(const std::string &filename, int nTriangles,
 
     ply_add_element(plyFile, "face", nTriangles);
     ply_add_list_property(plyFile, "vertex_indices", PLY_UINT8, PLY_INT);
-    if (faceIndices)
-        ply_add_scalar_property(plyFile, "face_indices", PLY_INT);
+    if (faceIndices) ply_add_scalar_property(plyFile, "face_indices", PLY_INT);
     ply_write_header(plyFile);
 
     for (int i = 0; i < nVertices; ++i) {
@@ -221,8 +218,7 @@ bool WritePlyFile(const std::string &filename, int nTriangles,
         ply_write(plyFile, vertexIndices[3 * i]);
         ply_write(plyFile, vertexIndices[3 * i + 1]);
         ply_write(plyFile, vertexIndices[3 * i + 2]);
-        if (faceIndices)
-            ply_write(plyFile, faceIndices[i]);
+        if (faceIndices) ply_write(plyFile, faceIndices[i]);
     }
     ply_close(plyFile);
     return true;
@@ -669,10 +665,9 @@ Interaction Triangle::Sample(const Point2f &u, Float *pdf) const {
 
 Float Triangle::SolidAngle(const Point3f &p, int nSamples) const {
     // Project the vertices into the unit sphere around p.
-    std::array<Vector3f, 3> pSphere = {
-        Normalize(mesh->p[v[0]] - p), Normalize(mesh->p[v[1]] - p),
-        Normalize(mesh->p[v[2]] - p)
-    };
+    std::array<Vector3f, 3> pSphere = {Normalize(mesh->p[v[0]] - p),
+                                       Normalize(mesh->p[v[1]] - p),
+                                       Normalize(mesh->p[v[2]] - p)};
 
     // http://math.stackexchange.com/questions/9819/area-of-a-spherical-triangle
     // Girard's theorem: surface area of a spherical triangle on a unit
@@ -699,10 +694,9 @@ Float Triangle::SolidAngle(const Point3f &p, int nSamples) const {
     // We only need to do three cross products to evaluate the angles at
     // all three vertices, though, since we can take advantage of the fact
     // that Cross(a, b) = -Cross(b, a).
-    return std::abs(
-        std::acos(Clamp(Dot(cross01, -cross12), -1, 1)) +
-        std::acos(Clamp(Dot(cross12, -cross20), -1, 1)) +
-        std::acos(Clamp(Dot(cross20, -cross01), -1, 1)) - Pi);
+    return std::abs(std::acos(Clamp(Dot(cross01, -cross12), -1, 1)) +
+                    std::acos(Clamp(Dot(cross12, -cross20), -1, 1)) +
+                    std::acos(Clamp(Dot(cross20, -cross01), -1, 1)) - Pi);
 }
 
 std::vector<std::shared_ptr<Shape>> CreateTriangleMeshShape(

@@ -132,11 +132,13 @@ Base::Base(const std::string &path, const int samplesPerPixel) {
         reader->read(&proto_light);
 
         // let's create the triangle mesh for the light
-        shared_ptr<char> meshStorage{new char[proto_light.mesh_data().size()],
-                                     default_delete<char[]>()};
+        unique_ptr<char[]> meshStorage{
+            make_unique<char[]>(proto_light.mesh_data().size())};
+
         memcpy(meshStorage.get(), &proto_light.mesh_data()[0],
                proto_light.mesh_data().size());
-        areaLightMeshes.emplace_back(make_shared<TriangleMesh>(meshStorage, 0));
+        areaLightMeshes.emplace_back(
+            make_shared<TriangleMesh>(move(meshStorage), 0));
         auto mesh = areaLightMeshes.back();
 
         auto lightParams = from_protobuf(proto_light.light().paramset());

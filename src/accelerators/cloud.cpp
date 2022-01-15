@@ -372,10 +372,10 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         const uint32_t area_light_id = reader->read<uint32_t>();
 
         const size_t len = reader->next_record_size();
-        shared_ptr<char> storage{new char[len], default_delete<char[]>()};
+        unique_ptr<char[]> storage{make_unique<char[]>(len)};
         reader->read(storage.get(), len);
 
-        tree_meshes.emplace(tm_id, make_shared<TriangleMesh>(storage, 0));
+        tree_meshes[tm_id] = make_shared<TriangleMesh>(move(storage), 0);
         mesh_material_ids[tm_id] = material_key;
 
         if (area_light_id) {

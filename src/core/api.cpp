@@ -2077,14 +2077,14 @@ Scene *RenderOptions::MakeScene() {
             reader->read(&proto_light);
 
             // let's create the triangle mesh for the light
-            std::shared_ptr<char> meshStorage{
-                new char[proto_light.mesh_data().size()],
-                std::default_delete<char[]>()};
+            std::unique_ptr<char[]> meshStorage{
+                std::make_unique<char[]>(proto_light.mesh_data().size())};
 
             memcpy(meshStorage.get(), &proto_light.mesh_data()[0],
                    proto_light.mesh_data().size());
 
-            auto lightMesh = std::make_shared<TriangleMesh>(meshStorage, 0);
+            auto lightMesh =
+                std::make_shared<TriangleMesh>(std::move(meshStorage), 0);
             auto lightParams = from_protobuf(proto_light.light().paramset());
             auto lightTrans =
                 from_protobuf(proto_light.light().light_to_world());

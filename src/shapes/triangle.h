@@ -39,10 +39,11 @@
 #define PBRT_SHAPES_TRIANGLE_H
 
 // shapes/triangle.h*
+#include <map>
+
+#include "accelerators/bvh.h"
 #include "shape.h"
 #include "stats.h"
-#include "accelerators/bvh.h"
-#include <map>
 
 namespace pbrt {
 
@@ -53,8 +54,8 @@ class VanillaBVHAccel;
 // Triangle Declarations
 struct TriangleMesh {
   private:
-    std::shared_ptr<char> buffer {nullptr};
-    const char * storage;
+    std::unique_ptr<char[]> buffer{nullptr};
+    const char *storage;
 
   public:
     // TriangleMesh Public Methods
@@ -65,7 +66,7 @@ struct TriangleMesh {
                  const std::shared_ptr<Texture<Float>> &shadowAlphaMask,
                  const int *faceIndices);
 
-    TriangleMesh(const std::shared_ptr<char> &buffer, const size_t offset);
+    TriangleMesh(std::unique_ptr<char[]> &&buffer, const size_t offset);
 
     // TriangleMesh Data
     const int nTriangles, nVertices;

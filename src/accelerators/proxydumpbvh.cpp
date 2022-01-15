@@ -1969,11 +1969,10 @@ vector<uint32_t> ProxyDumpBVH::DumpTreelets(bool root,
                     const auto areaLightId = reader->read<uint32_t>();
                     const auto len = reader->next_record_size();
 
-                    shared_ptr<char> storage{new char[len],
-                                             default_delete<char[]>()};
+                    unique_ptr<char[]> storage{make_unique<char[]>(len)};
                     reader->read(storage.get(), len);
 
-                    auto m = make_shared<TriangleMesh>(storage, 0);
+                    auto m = make_shared<TriangleMesh>(move(storage), 0);
                     const uint32_t newId =
                         _manager.getNextId(ObjectType::TriangleMesh);
 
