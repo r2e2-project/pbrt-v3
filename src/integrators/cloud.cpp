@@ -55,7 +55,7 @@ tuple<RayStatePtr, RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
     SurfaceInteraction &it = rayState.hitInfo.isect;
 
     if (rayState.hitInfo.material.id) {
-        auto &material = treelet.GetMaterial(rayState.hitInfo.material.id);
+        const auto material = treelet.GetMaterial(rayState.hitInfo.material.id);
 
         // the next two lines are basically:
         // it.ComputeScatteringFunctions(rayState.ray, arena, true);
