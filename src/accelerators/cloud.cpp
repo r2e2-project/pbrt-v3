@@ -21,7 +21,6 @@
 #include "messages/utils.h"
 #include "pbrt.pb.h"
 #include "shapes/triangle.h"
-#include "textures/constant.h"
 
 using namespace std;
 
@@ -39,13 +38,12 @@ struct membuf : streambuf {
 
 CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
                    const vector<shared_ptr<Light>> *lights)
-    : bvh_root_(bvh_root),
-      zeroAlphaTexture(std::make_shared<ConstantTexture<Float>>(0.f)) {
+    : bvh_root_(bvh_root) {
     ProfilePhase _(Prof::AccelConstruction);
 
     if (lights) {
         for (auto &light : *lights) {
-            sceneLights.push_back(light.get());
+            scene_lights_.push_back(light.get());
         }
     }
 
@@ -116,8 +114,6 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
         preloading_done_ = true;
     }
 }
-
-CloudBVH::~CloudBVH() {}
 
 const Material *CloudBVH::GetMaterial(const uint32_t material_id) const {
     return treelets_.at(bvh_root_)->included_material.at(material_id).get();
@@ -211,7 +207,7 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
     /* fill in unfinished primitives */
     for (auto &u : treelet.unfinished_transformed) {
         treelet.primitives[u.primitive_index] =
-            make_unique<TransformedPrimitive>(bvh_instances_[u.instance_ref],
+            make_unique<TransformedPrimitive>(bvh_instances_.at(u.instance_ref),
                                               move(u.primitive_to_world));
     }
 
@@ -223,7 +219,7 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
 
         auto &u = *ug;
         if (u.area_light_id) {
-            if (sceneLights.empty()) {
+            if (scene_lights_.empty()) {
                 auto &light_data = area_light_params_.at(u.area_light_id);
                 area_light = CreateDiffuseAreaLight(light_data.second,
                                                     medium_interface.outside,
@@ -232,13 +228,13 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) const {
             } else {
                 area_light = shared_ptr<AreaLight>(
                     dynamic_cast<AreaLight *>(
-                        sceneLights.at(u.area_light_id - 1)),
+                        scene_lights_.at(u.area_light_id - 1)),
                     [](auto p) {});
             }
         }
 
         treelet.primitives[u.primitive_index] = make_unique<GeometricPrimitive>(
-            u.shape, materials_[u.material_key.id], area_light,
+            u.shape, materials_.at(u.material_key.id), area_light,
             medium_interface);
     }
 
@@ -374,7 +370,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         mesh_material_ids[tm_id] = material_key;
 
         if (area_light_id) {
-            tree_meshes.at(tm_id)->alphaMask = zeroAlphaTexture;
+            tree_meshes.at(tm_id)->alphaMask = zero_alpha_texture_;
             mesh_area_light_id[tm_id] = area_light_id;
         }
     }
@@ -762,60 +758,6 @@ bool CloudBVH::IntersectP(const Ray &ray, const uint32_t bvh_root) const {
     return false;
 }
 
-vector<Bounds3f> CloudBVH::getTreeletNodeBounds(
-    const uint32_t treelet_id, const int recursionLimit) const {
-    return vector<Bounds3f>();
-#if 0
-    LoadTreelet(treelet_id);
-
-    vector<Bounds3f> treeletBounds;
-
-    const int depth = 0;
-    const int idx = 1;
-
-    // load base node bounds
-    auto &currTreelet = *treelets_.at(treelet_id);
-    auto &currNode = currTreelet.nodes[0];
-
-    // size reflects indexing starting at 1
-    const size_t size = pow(2, recursionLimit);
-    treeletBounds.resize(size);
-    recurseBVHNodes(depth, recursionLimit, idx, currTreelet, currNode,
-                    treeletBounds);
-
-    return treeletBounds;
-#endif
-}
-
-void CloudBVH::recurseBVHNodes(const int depth, const int recursionLimit,
-                               const int idx, const Treelet &currTreelet,
-                               const TreeletNode &currNode,
-                               vector<Bounds3f> &treeletBounds) const {
-// FIXME Update for multi root treelets
-#if 0
-    if (depth == recursionLimit) {
-        return;
-    }
-
-    // save the current node
-    treeletBounds[idx] = currNode.bounds;
-
-    // save left value, if there's one
-    if (currNode.has[0]) {
-        const uint32_t left = currNode.child[0];
-        recurseBVHNodes(depth + 1, recursionLimit, 2 * idx, currTreelet,
-                        currTreelet.nodes[left], treeletBounds);
-    }
-
-    // save right value, if there's one
-    if (currNode.has[1]) {
-        const uint32_t right = currNode.child[1];
-        recurseBVHNodes(depth + 1, recursionLimit, 2 * idx + 1, currTreelet,
-                        currTreelet.nodes[right], treeletBounds);
-    }
-#endif
-}
-
 void CloudBVH::clear() const {
     treelets_.clear();
     bvh_instances_.clear();
@@ -823,8 +765,8 @@ void CloudBVH::clear() const {
 }
 
 shared_ptr<CloudBVH> CreateCloudBVH(
-    const ParamSet &ps, const vector<shared_ptr<Light>> &sceneLights) {
-    return make_shared<CloudBVH>(0, true, &sceneLights);
+    const ParamSet &ps, const vector<shared_ptr<Light>> &scene_lights_) {
+    return make_shared<CloudBVH>(0, true, &scene_lights_);
 }
 
 Bounds3f CloudBVH::IncludedInstance::WorldBound() const {

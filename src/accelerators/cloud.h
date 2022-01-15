@@ -17,6 +17,7 @@
 #include "pbrt/raystate.h"
 #include "primitive.h"
 #include "texture.h"
+#include "textures/constant.h"
 #include "transform.h"
 
 namespace pbrt {
@@ -55,7 +56,6 @@ class CloudBVH : public Aggregate {
 
     CloudBVH(const uint32_t bvh_root, const bool preload_all,
              const std::vector<std::shared_ptr<pbrt::Light>> *lights = nullptr);
-    ~CloudBVH();
 
     CloudBVH(const CloudBVH &) = delete;
     CloudBVH &operator=(const CloudBVH &) = delete;
@@ -202,32 +202,23 @@ class CloudBVH : public Aggregate {
     const uint32_t bvh_root_;
     bool preloading_done_{false};
 
-    Transform identity_transform_ {};
-    std::shared_ptr<Texture<Float>> zeroAlphaTexture;
+    Transform identity_transform_{};
+    std::shared_ptr<Texture<Float>> zero_alpha_texture_{
+        std::make_shared<ConstantTexture<Float>>(0.f)};
 
-    mutable std::vector<std::unique_ptr<Treelet>> treelets_;
-    mutable std::map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_;
-    mutable std::map<uint32_t, std::shared_ptr<Material>> materials_;
+    mutable std::vector<std::unique_ptr<Treelet>> treelets_{};
+    mutable std::map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_{};
+    mutable std::map<uint32_t, std::shared_ptr<Material>> materials_{};
     mutable std::map<uint32_t, std::pair<ParamSet, Transform>>
-        area_light_params_;
+        area_light_params_{};
 
-    mutable std::vector<pbrt::Light *> sceneLights{};
+    mutable std::vector<pbrt::Light *> scene_lights_{};
 
     void finalizeTreeletLoad(const uint32_t root_id) const;
     void loadTreeletBase(const uint32_t root_id, const char *buffer = nullptr,
                          size_t length = 0) const;
 
     void clear() const;
-
-    // returns array of Bounds3f with structure of Treelet's internal BVH
-    // nodes
-    std::vector<Bounds3f> getTreeletNodeBounds(
-        const uint32_t treelet_id, const int recursionLimit = 4) const;
-
-    void recurseBVHNodes(const int depth, const int recursionLimit,
-                         const int idx, const Treelet &currTreelet,
-                         const TreeletNode &currNode,
-                         std::vector<Bounds3f> &treeletBounds) const;
 };
 
 std::shared_ptr<CloudBVH> CreateCloudBVH(
