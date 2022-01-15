@@ -139,7 +139,7 @@ class SceneManager {
         tmAreaLightIds[tm] = light;
     }
 
-    uint32_t getMeshAreaLightId(const TriangleMesh* tm) {
+    uint32_t getMeshAreaLightId(const TriangleMesh* tm) const {
         return tmAreaLightIds.count(tm) ? tmAreaLightIds.at(tm) : 0;
     }
 
@@ -159,7 +159,7 @@ class SceneManager {
         inMemoryTextures.emplace(path, make_pair(std::move(data), length));
     }
 
-    std::pair<char*, size_t> getInMemoryTexture(const std::string& path) {
+    std::pair<char*, size_t> getInMemoryTexture(const std::string& path) const {
         auto& tex = inMemoryTextures.at(path);
         return {tex.first.get(), tex.second};
     }
