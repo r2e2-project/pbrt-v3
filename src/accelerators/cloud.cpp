@@ -215,7 +215,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                                size_t length) {
     ProfilePhase _(Prof::LoadTreelet);
 
-    LOG(INFO) << "Loading base for treelet " << root_id;
+    LOG(INFO) << "Starting loading the base for treelet " << root_id;
 
     treelets_[root_id] = make_unique<Treelet>();
 
@@ -281,7 +281,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         const string data = reader->read<string>();
         protobuf::SpectrumTexture stex_proto;
         stex_proto.ParseFromString(data);
-        stexes.emplace(id, spectrum_texture::from_protobuf(stex_proto));
+        stexes.emplace(id, move(spectrum_texture::from_protobuf(stex_proto)));
     }
 
     // FLOAT TEXTURES
@@ -291,7 +291,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         const string data = reader->read<string>();
         protobuf::FloatTexture ftex_proto;
         ftex_proto.ParseFromString(data);
-        ftexes.emplace(id, float_texture::from_protobuf(ftex_proto));
+        ftexes.emplace(id, move(float_texture::from_protobuf(ftex_proto)));
     }
 
     // MATERIALS
@@ -302,7 +302,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         protobuf::Material material;
         material.ParseFromString(data);
         treelet.included_material.emplace(
-            id, material::from_protobuf(material, ftexes, stexes));
+            id, move(material::from_protobuf(material, ftexes, stexes)));
     }
 
     map<uint32_t, shared_ptr<TriangleMesh>> tree_meshes;
@@ -312,12 +312,12 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     /* read in the triangle meshes for this treelet */
     const uint32_t num_triangle_meshes = reader->read<uint32_t>();
 
-    LOG(INFO) << "Loading base for treelet " << root_id << " which has "
+    LOG(INFO) << "Loading the base for treelet " << root_id << " which has "
               << included_texture_count << " texture(s), "
               << included_float_count << " float texture(s), "
               << included_spectrum_count << " spectrum texture(s), "
               << included_material_count << " material(s) and "
-              << num_triangle_meshes << " triangle meshes";
+              << num_triangle_meshes << " triangle meshe(s)";
 
     // find the start and the end of the buffer for meshes
     for (int i = 0; i < num_triangle_meshes; ++i) {
