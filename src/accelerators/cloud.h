@@ -9,6 +9,7 @@
 #include <set>
 #include <stack>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 #include "material.h"
