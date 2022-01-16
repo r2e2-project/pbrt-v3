@@ -93,7 +93,7 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
         }
 
         /* (2.B) create all the necessary external instances */
-        set<uint64_t> required_instances;
+        set<uint16_t> required_instances;
 
         for (size_t i = 0; i < treelet_count; i++) {
             required_instances.insert(treelets_[i]->required_instances.begin(),
@@ -102,8 +102,7 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
 
         for (const auto rid : required_instances) {
             if (not bvh_instances_.count(rid)) {
-                bvh_instances_[rid] =
-                    make_shared<ExternalInstance>(*this, (uint16_t)(rid >> 32));
+                bvh_instances_[rid] = make_shared<ExternalInstance>(*this, rid);
             }
         }
 
@@ -161,8 +160,7 @@ void CloudBVH::LoadTreelet(const uint32_t root_id, const char *buffer,
     /* create the instances */
     for (const auto rid : treelet.required_instances) {
         if (not bvh_instances_.count(rid)) {
-            bvh_instances_[rid] =
-                make_shared<ExternalInstance>(*this, (uint16_t)(rid >> 32));
+            bvh_instances_[rid] = make_shared<ExternalInstance>(*this, rid);
         }
     }
 
@@ -175,8 +173,9 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) {
     /* fill in unfinished primitives */
     for (auto &u : treelet.unfinished_transformed) {
         treelet.primitives[u.primitive_index] =
-            make_unique<TransformedPrimitive>(bvh_instances_.at(u.instance_ref),
-                                              move(u.primitive_to_world));
+            make_unique<TransformedPrimitive>(
+                bvh_instances_.at(u.instance_group),
+                move(u.primitive_to_world));
     }
 
     MediumInterface medium_interface{};
@@ -392,10 +391,9 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                 start, serdes_primitive.start_time, end,
                 serdes_primitive.end_time};
 
-            uint64_t instance_ref = serdes_primitive.root_ref;
-
-            uint16_t instance_group = (uint16_t)(instance_ref >> 32);
-            uint32_t instance_node = (uint32_t)instance_ref;
+            const uint64_t instance_ref = serdes_primitive.root_ref;
+            const uint16_t instance_group = (uint16_t)(instance_ref >> 32);
+            const uint32_t instance_node = (uint32_t)instance_ref;
 
             if (instance_group == root_id) {
                 if (not tree_instances.count(instance_ref)) {
@@ -406,10 +404,10 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                 tree_primitives.push_back(make_unique<TransformedPrimitive>(
                     tree_instances[instance_ref], primitive_to_world));
             } else {
-                treelet.required_instances.insert(instance_ref);
+                treelet.required_instances.insert(instance_group);
 
                 treelet.unfinished_transformed.emplace_back(
-                    tree_primitives.size(), instance_ref,
+                    tree_primitives.size(), instance_group,
                     move(primitive_to_world));
 
                 tree_primitives.push_back(nullptr);

@@ -105,15 +105,14 @@ class CloudBVH : public Aggregate {
 
     struct UnfinishedTransformedPrimitive {
         size_t primitive_index;
-        uint64_t instance_ref;
         uint16_t instance_group;
         AnimatedTransform primitive_to_world;
 
         UnfinishedTransformedPrimitive(const size_t primitive_index,
-                                       const uint64_t instance_ref,
+                                       const uint16_t instance_group,
                                        AnimatedTransform &&primitive_to_world)
             : primitive_index(primitive_index),
-              instance_ref(instance_ref),
+              instance_group(instance_group),
               primitive_to_world(std::move(primitive_to_world)) {}
     };
 
@@ -151,7 +150,7 @@ class CloudBVH : public Aggregate {
         std::map<uint64_t, std::shared_ptr<Primitive>> instances{};
 
         std::set<MaterialKey> required_materials{};
-        std::set<uint64_t> required_instances{};
+        std::set<uint16_t> required_instances{};
 
         std::vector<UnfinishedTransformedPrimitive> unfinished_transformed{};
         std::vector<std::unique_ptr<UnfinishedGeometricPrimitive>>
@@ -202,7 +201,7 @@ class CloudBVH : public Aggregate {
         std::make_shared<ConstantTexture<Float>>(0.f)};
 
     std::vector<std::unique_ptr<Treelet>> treelets_{};
-    std::unordered_map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_{};
+    std::unordered_map<uint16_t, std::shared_ptr<Primitive>> bvh_instances_{};
     std::unordered_map<uint32_t, std::shared_ptr<Material>> materials_{};
     std::map<uint32_t, std::pair<ParamSet, Transform>> area_light_params_{};
     std::vector<pbrt::Light *> scene_lights_{};
