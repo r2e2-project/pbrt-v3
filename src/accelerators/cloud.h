@@ -18,7 +18,6 @@
 #include "pbrt/raystate.h"
 #include "primitive.h"
 #include "texture.h"
-#include "textures/constant.h"
 #include "transform.h"
 
 namespace pbrt {
@@ -185,8 +184,7 @@ class CloudBVH : public Aggregate {
     bool preloading_done_{false};
 
     Transform identity_transform_{};
-    std::shared_ptr<Texture<Float>> zero_alpha_texture_{
-        std::make_shared<ConstantTexture<Float>>(0.f)};
+    std::shared_ptr<Texture<Float>> zero_alpha_texture_;
 
     std::vector<std::unique_ptr<Treelet>> treelets_{};
     std::unordered_map<uint16_t, std::shared_ptr<Primitive>> bvh_instances_{};

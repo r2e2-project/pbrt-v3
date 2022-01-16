@@ -21,6 +21,7 @@
 #include "messages/utils.h"
 #include "pbrt.pb.h"
 #include "shapes/triangle.h"
+#include "textures/constant.h"
 
 using namespace std;
 
@@ -38,7 +39,8 @@ struct membuf : streambuf {
 
 CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
                    const vector<shared_ptr<Light>> *lights)
-    : bvh_root_(bvh_root) {
+    : bvh_root_(bvh_root),
+      zero_alpha_texture_(make_shared<ConstantTexture<Float>>(0.f)) {
     ProfilePhase _(Prof::AccelConstruction);
 
     if (lights) {
