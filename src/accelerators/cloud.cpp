@@ -326,7 +326,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     const uint32_t num_triangle_meshes = reader->read<uint32_t>();
 
     LOG(INFO) << "Loading base for treelet " << root_id << " which has "
-              << included_texture_count << "texture(s), "
+              << included_texture_count << " texture(s), "
               << included_float_count << " float texture(s), "
               << included_spectrum_count << " spectrum texture(s), "
               << included_material_count << " material(s) and "
