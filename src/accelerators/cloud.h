@@ -37,12 +37,8 @@ class PlaceholderMaterial : public Material {
             "PlaceholderMaterial::ComputeScatteringFunctions: not implemented");
     }
 
-    static void Bump(const std::shared_ptr<Texture<Float>> &d,
-                     SurfaceInteraction *si);
-
-    MaterialType GetType() const { return MaterialType::Placeholder; }
-
     MaterialKey GetMaterialKey() const { return material_key; }
+    MaterialType GetType() const { return MaterialType::Placeholder; }
 
   private:
     MaterialKey material_key;
@@ -50,14 +46,10 @@ class PlaceholderMaterial : public Material {
 
 class CloudBVH : public Aggregate {
   public:
-    struct TreeletInfo {
-        std::set<uint32_t> children{};
-        std::map<uint32_t, uint64_t> instances{};
-    };
-
     CloudBVH(const uint32_t bvh_root, const bool preload_all,
              const std::vector<std::shared_ptr<pbrt::Light>> *lights = nullptr);
 
+    // disallow copying
     CloudBVH(const CloudBVH &) = delete;
     CloudBVH &operator=(const CloudBVH &) = delete;
 

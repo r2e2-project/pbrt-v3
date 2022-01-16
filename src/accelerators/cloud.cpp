@@ -415,7 +415,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
             const auto mesh_id = serdes_triangle.mesh_id;
             const auto tri_number = serdes_triangle.tri_number;
-            const auto material_key = mesh_material_ids[mesh_id];
+            const auto material_key = mesh_material_ids.at(mesh_id);
             const auto area_light_id = mesh_area_light_id.count(mesh_id)
                                            ? mesh_area_light_id.at(mesh_id)
                                            : 0;
