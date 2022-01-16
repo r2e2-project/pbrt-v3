@@ -139,49 +139,6 @@ Bounds3f CloudBVH::WorldBound() const {
     return treelets_[bvh_root_]->nodes[0].bounds;
 }
 
-// Sums the full surface area for each root. Does not account for overlap
-// between roots
-Float CloudBVH::RootSurfaceAreas(Transform txfm) const {
-    checkIfTreeletIsLoaded(bvh_root_);
-    CHECK_EQ(treelets_.size(), 1);
-
-    Float area = 0;
-
-    vector<Bounds3f> roots;
-
-    for (const TreeletNode &node : treelets_[bvh_root_]->nodes) {
-        auto cur = txfm(node.bounds);
-
-        bool newRoot = true;
-        for (const Bounds3f &root : roots) {
-            auto u = Union(root, cur);
-            if (u == root) {
-                newRoot = false;
-                break;
-            }
-        }
-
-        if (newRoot) {
-            roots.push_back(cur);
-            area += cur.SurfaceArea();
-        }
-    }
-
-    return area;
-}
-
-Float CloudBVH::SurfaceAreaUnion() const {
-    checkIfTreeletIsLoaded(bvh_root_);
-    CHECK_EQ(treelets_.size(), 1);
-
-    Bounds3f boundUnion;
-    for (const TreeletNode &node : treelets_[bvh_root_]->nodes) {
-        boundUnion = Union(boundUnion, node.bounds);
-    }
-
-    return boundUnion.SurfaceArea();
-}
-
 void CloudBVH::LoadTreelet(const uint32_t root_id, const char *buffer,
                            const size_t length) {
     if (preloading_done_ or

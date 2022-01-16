@@ -61,8 +61,6 @@ class CloudBVH : public Aggregate {
     CloudBVH &operator=(const CloudBVH &) = delete;
 
     Bounds3f WorldBound() const;
-    Float RootSurfaceAreas(Transform txfm = Transform()) const;
-    Float SurfaceAreaUnion() const;
 
     bool Intersect(const Ray &ray, SurfaceInteraction *isect) const;
     bool IntersectP(const Ray &ray) const;
@@ -76,10 +74,6 @@ class CloudBVH : public Aggregate {
                      const size_t length = 0);
 
     const Material *GetMaterial(const uint32_t material_id) const;
-
-    const TreeletInfo &GetInfo(const uint32_t treelet_id) {
-        throw std::runtime_error("not implemented");
-    }
 
     struct TreeletNode {
         Bounds3f bounds{};
