@@ -216,8 +216,6 @@ class CloudBVH : public Aggregate {
     void loadTreeletBase(const uint32_t root_id, const char *buffer = nullptr,
                          size_t length = 0);
     void checkIfTreeletIsLoaded(const uint32_t root_id) const;
-
-    void clear();
 };
 
 std::shared_ptr<CloudBVH> CreateCloudBVH(

@@ -52,8 +52,8 @@ namespace {
 // Reference count for the cache. Note: we assume that PtexTextures aren't
 // being created/destroyed concurrently by multiple threads.
 
-// XXX(sadjad): the above comment is not valid anymore as in R2T2, we load the
-// scene in parallel
+// XXX(sadjad): the above comment is not valid anymore as in R2T2, as we load
+// the scene in parallel
 int nActiveTextures = 0;
 Ptex::PtexCache *cache = nullptr;
 std::mutex cacheMutex{};

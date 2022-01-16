@@ -771,12 +771,6 @@ bool CloudBVH::IntersectP(const Ray &ray, const uint32_t bvh_root) const {
     return false;
 }
 
-void CloudBVH::clear() {
-    treelets_.clear();
-    bvh_instances_.clear();
-    materials_.clear();
-}
-
 shared_ptr<CloudBVH> CreateCloudBVH(
     const ParamSet &ps, const vector<shared_ptr<Light>> &scene_lights_) {
     // just to supress the warnings...
