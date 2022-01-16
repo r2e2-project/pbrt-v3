@@ -225,26 +225,15 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     auto &tree_transforms = treelet.transforms;
     auto &tree_instances = treelet.instances;
 
-    vector<char> treelet_buffer;
+    string treelet_buffer;
     if (!buffer) {
         const string treelet_path =
             _manager.getScenePath() + "/" +
             _manager.getFileName(ObjectType::Treelet, root_id);
 
-        ifstream fin{treelet_path, ios::binary | ios::ate};
-
-        if (!fin.good()) {
-            throw runtime_error("Could not open treelet file: " + treelet_path);
-        }
-
-        streamsize size = fin.tellg();
-        fin.seekg(0, ios::beg);
-
-        treelet_buffer.resize(size);
-        fin.read(treelet_buffer.data(), size);
-
+        treelet_buffer = roost::read_file(treelet_path);
         buffer = treelet_buffer.data();
-        length = treelet_buffer.size();
+        length = treelet_buffer.length();
     }
 
     unique_ptr<RecordReader> reader;
