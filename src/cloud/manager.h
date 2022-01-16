@@ -164,6 +164,9 @@ class SceneManager {
 
     std::pair<const char*, size_t> getInMemoryTexture(
         const std::string& path) const {
+        auto lock = syncTextureReads_ ? std::unique_lock<std::mutex>(mutex_)
+                                      : std::unique_lock<std::mutex>();
+
         const auto& tex = inMemoryTextures.at(path);
         return {tex.first.get(), tex.second};
     }
@@ -176,8 +179,11 @@ class SceneManager {
     }
 
     ImagePartition& getInMemoryImagePartition(const uint32_t pid) {
+        std::lock_guard<std::mutex> lock{mutex_};
         return inMemoryImagePartitions.at(pid);
     }
+
+    void setSyncTextureReads(const bool val) { syncTextureReads_ = val; }
 
   private:
     void loadManifest();
@@ -217,7 +223,8 @@ class SceneManager {
 
     std::map<ObjectID, std::set<ObjectKey>> treeletDependencies;
 
-    std::mutex mutex_;
+    bool syncTextureReads_{false};
+    mutable std::mutex mutex_;
 };
 
 namespace global {

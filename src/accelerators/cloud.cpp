@@ -65,6 +65,8 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
     }
 
     if (preload_all) {
+        _manager.setSyncTextureReads(true);
+
         /* (1) load all the treelets in parallel */
         const auto treelet_count = _manager.treeletCount();
 
@@ -111,6 +113,7 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
             [&](int64_t treelet_id) { finalizeTreeletLoad(treelet_id); },
             treelet_count);
 
+        _manager.setSyncTextureReads(false);
         preloading_done_ = true;
     }
 }
