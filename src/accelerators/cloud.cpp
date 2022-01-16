@@ -217,6 +217,8 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                                size_t length) {
     ProfilePhase _(Prof::LoadTreelet);
 
+    LOG(INFO) << "Loading base for treelet " << root_id;
+
     treelets_[root_id] = make_unique<Treelet>();
 
     auto &treelet = *treelets_[root_id];
@@ -322,6 +324,13 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
     /* read in the triangle meshes for this treelet */
     const uint32_t num_triangle_meshes = reader->read<uint32_t>();
+
+    LOG(INFO) << "Loading base for treelet " << root_id << " which has "
+              << included_texture_count << "texture(s), "
+              << included_float_count << " float texture(s), "
+              << included_spectrum_count << " spectrum texture(s), "
+              << included_material_count << " material(s) and "
+              << num_triangle_meshes << " triangle meshes";
 
     // find the start and the end of the buffer for meshes
     for (int i = 0; i < num_triangle_meshes; ++i) {
@@ -434,6 +443,8 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
         nNodes++;
     }
+
+    LOG(INFO) << "Finished loading base for treelet " << root_id;
 }
 
 void CloudBVH::Trace(RayState &rayState) const {
