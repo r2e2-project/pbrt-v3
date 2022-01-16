@@ -18,7 +18,7 @@ class ImagePartition {
     int x0{0}, y0{0}, w{0}, h{0};
     int W{0}, H{0};
 
-    std::shared_ptr<char> storage{};
+    std::unique_ptr<char[]> storage{};
     RGBSpectrum *data{};
 
     const RGBSpectrum &Texel(int s, int t) const;
@@ -28,7 +28,7 @@ class ImagePartition {
                    const size_t partition_count, const size_t partition_idx,
                    const ImageWrap wrap_mode);
 
-    ImagePartition(const std::shared_ptr<char> &partition_data);
+    ImagePartition(std::unique_ptr<char[]> &&partition_data);
 
     RGBSpectrum Lookup(const Point2f &st) const;
     void WriteImage(const std::string &filename) const;

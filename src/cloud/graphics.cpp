@@ -258,7 +258,7 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
         if (lightRay) output.rays[2] = move(lightRay);
         return;
     } else if (r.needsImageSampling) {
-        auto p = _manager.getInMemoryImagePartition(r.imageSampleInfo.imageId);
+        auto &p = _manager.getInMemoryImagePartition(r.imageSampleInfo.imageId);
         auto Li = p.Lookup(r.imageSampleInfo.uv);
         r.Ld *= Li;
         output.sample = move(rayStatePtr);

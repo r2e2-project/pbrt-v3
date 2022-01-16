@@ -145,8 +145,7 @@ ImagePartition::ImagePartition(const Point2i &resolution,
     W = w + 2 * padding;
     H = h + 2 * padding;
 
-    storage = shared_ptr<char>(new char[W * H * sizeof(RGBSpectrum)],
-                               default_delete<char[]>());
+    storage = make_unique<char[]>(W * H * sizeof(RGBSpectrum));
     data = reinterpret_cast<RGBSpectrum *>(storage.get());
 
     // copy the main pixels
@@ -227,8 +226,8 @@ ImagePartition::ImagePartition(const Point2i &resolution,
     }
 }
 
-ImagePartition::ImagePartition(const shared_ptr<char> &partition_data)
-    : storage(partition_data) {
+ImagePartition::ImagePartition(unique_ptr<char[]> &&partition_data)
+    : storage(move(partition_data)) {
     int *ptr = reinterpret_cast<int *>(storage.get());
     resolution.x = ptr[0];
     resolution.y = ptr[1];
