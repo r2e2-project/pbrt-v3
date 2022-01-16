@@ -120,7 +120,7 @@ class : public PtexInputHandler {
 template <typename T>
 PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
     : filename(filename), gamma(gamma) {
-    std::unique_lock<std::mutex> cacheCreationLock{cacheMutex};
+    std::lock_guard<std::mutex> cacheCreationLock{cacheMutex};
     if (!cache) {
         CHECK_EQ(nActiveTextures, 0);
         int maxFiles = 100;
@@ -149,7 +149,6 @@ PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
         // TODO? cache->setSearchPath(...);
     }
     ++nActiveTextures;
-    cacheCreationLock.unlock();
 
     // Issue an error if the texture doesn't exist or has an unsupported
     // number of channels.
@@ -172,7 +171,7 @@ PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
 
 template <typename T>
 PtexTexture<T>::~PtexTexture() {
-    std::unique_lock<std::mutex> cacheCreationLock{cacheMutex};
+    std::lock_guard<std::mutex> cacheCreationLock{cacheMutex};
     if (--nActiveTextures == 0) {
         LOG(INFO) << "Releasing ptex cache";
         Ptex::PtexCache::Stats stats;
