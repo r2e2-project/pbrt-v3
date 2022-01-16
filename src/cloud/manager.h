@@ -71,7 +71,7 @@ class SceneManager {
     static std::string getFileName(const ObjectType type, const uint32_t id);
     const std::string& getScenePath() const { return scenePath; }
 
-    std::string getFilePath(const ObjectType type, const uint32_t id) {
+    std::string getFilePath(const ObjectType type, const uint32_t id) const {
         return getScenePath() + "/" + getFileName(type, id);
     }
 
@@ -201,34 +201,34 @@ class SceneManager {
     std::unordered_map<const void*, uint32_t> ptrIds{};
     std::map<std::string, uint32_t> textureNameToId;
     std::map<ObjectKey, uint64_t> objectSizes{};
-    std::map<ObjectKey, std::set<ObjectKey>> dependencies;
+    std::map<ObjectKey, std::set<ObjectKey>> dependencies{};
 
     std::unordered_map<std::string, std::pair<std::unique_ptr<char[]>, size_t>>
-        inMemoryTextures;
+        inMemoryTextures{};
 
-    std::map<uint32_t, ImagePartition> inMemoryImagePartitions;
+    std::map<uint32_t, ImagePartition> inMemoryImagePartitions{};
 
     // Dumping treelets
-    std::map<const TriangleMesh*, uint32_t> tmMaterialIds;
-    std::map<const TriangleMesh*, uint32_t> tmAreaLightIds;
+    std::map<const TriangleMesh*, uint32_t> tmMaterialIds{};
+    std::map<const TriangleMesh*, uint32_t> tmAreaLightIds{};
 
     std::map<
         std::vector<std::string>,
         std::vector<std::pair<std::vector<ObjectID>,
                               std::shared_ptr<std::map<uint32_t, uint32_t>>>>>
-        compoundTextures;
+        compoundTextures{};
 
     std::map<uint32_t,
              std::map<uint32_t, std::shared_ptr<std::map<uint32_t, uint32_t>>>>
-        compoundMaterials;  // origMtl -> {newMtl -> {oldFace -> newFace}}
+        compoundMaterials{};  // origMtl -> {newMtl -> {oldFace -> newFace}}
 
-    std::map<uint32_t, uint32_t> partitionToTreelet;
-    std::map<uint32_t, uint32_t> materialToTreelet;
+    std::map<uint32_t, uint32_t> partitionToTreelet{};
+    std::map<uint32_t, uint32_t> materialToTreelet{};
 
-    std::map<ObjectID, std::set<ObjectKey>> treeletDependencies;
+    std::map<ObjectID, std::set<ObjectKey>> treeletDependencies{};
 
     bool syncTextureReads_{false};
-    mutable std::mutex mutex_;
+    mutable std::mutex mutex_{};
 };
 
 namespace global {

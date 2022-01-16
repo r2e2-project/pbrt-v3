@@ -177,10 +177,10 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) {
 
     /* fill in unfinished primitives */
     for (auto &u : treelet.unfinished_transformed) {
-        treelet.primitives[u.primitive_index] =
+        treelet.primitives[u->primitive_index] =
             make_unique<TransformedPrimitive>(
-                bvh_instances_.at(u.instance_group),
-                move(u.primitive_to_world));
+                bvh_instances_.at(u->instance_group),
+                move(u->primitive_to_world));
     }
 
     MediumInterface medium_interface{};
@@ -408,8 +408,9 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
                 treelet.required_instances.insert(instance_group);
 
                 treelet.unfinished_transformed.emplace_back(
-                    tree_primitives.size(), instance_group,
-                    move(primitive_to_world));
+                    make_unique<UnfinishedTransformedPrimitive>(
+                        tree_primitives.size(), instance_group,
+                        move(primitive_to_world)));
 
                 tree_primitives.push_back(nullptr);
             }

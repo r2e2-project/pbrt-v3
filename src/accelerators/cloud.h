@@ -129,7 +129,7 @@ class CloudBVH : public Aggregate {
     };
 
     struct Treelet {
-        std::map<uint32_t, std::shared_ptr<Material>> included_material;
+        std::map<uint32_t, std::shared_ptr<Material>> included_material{};
 
         std::vector<TreeletNode> nodes{};
         std::vector<std::unique_ptr<Primitive>> primitives{};
@@ -139,7 +139,8 @@ class CloudBVH : public Aggregate {
         std::set<MaterialKey> required_materials{};
         std::set<uint16_t> required_instances{};
 
-        std::vector<UnfinishedTransformedPrimitive> unfinished_transformed{};
+        std::vector<std::unique_ptr<UnfinishedTransformedPrimitive>>
+            unfinished_transformed{};
         std::vector<std::unique_ptr<UnfinishedGeometricPrimitive>>
             unfinished_geometric{};
     };
