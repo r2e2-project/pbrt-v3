@@ -35,7 +35,9 @@
 
 #include <Ptexture.h>
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 
 #include "cloud/manager.h"
 #include "error.h"
@@ -49,8 +51,12 @@ namespace {
 
 // Reference count for the cache. Note: we assume that PtexTextures aren't
 // being created/destroyed concurrently by multiple threads.
-int nActiveTextures;
-Ptex::PtexCache *cache;
+
+// XXX(sadjad): the above comment is not valid anymore as in R2T2, we load the
+// scene in parallel
+int nActiveTextures = 0;
+Ptex::PtexCache *cache = nullptr;
+std::mutex cacheMutex{};
 
 STAT_COUNTER("Texture/Ptex lookups", nLookups);
 STAT_COUNTER("Texture/Ptex files accessed", nFilesAccessed);
@@ -114,6 +120,7 @@ class : public PtexInputHandler {
 template <typename T>
 PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
     : filename(filename), gamma(gamma) {
+    std::unique_lock<std::mutex> cacheCreationLock{cacheMutex};
     if (!cache) {
         CHECK_EQ(nActiveTextures, 0);
         int maxFiles = 100;
@@ -142,6 +149,7 @@ PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
         // TODO? cache->setSearchPath(...);
     }
     ++nActiveTextures;
+    cacheCreationLock.unlock();
 
     // Issue an error if the texture doesn't exist or has an unsupported
     // number of channels.
@@ -164,6 +172,7 @@ PtexTexture<T>::PtexTexture(const std::string &filename, Float gamma)
 
 template <typename T>
 PtexTexture<T>::~PtexTexture() {
+    std::unique_lock<std::mutex> cacheCreationLock{cacheMutex};
     if (--nActiveTextures == 0) {
         LOG(INFO) << "Releasing ptex cache";
         Ptex::PtexCache::Stats stats;
