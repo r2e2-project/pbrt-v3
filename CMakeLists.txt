@@ -534,6 +534,11 @@ FIND_PACKAGE(Protobuf REQUIRED)
 INCLUDE(FindLZ4)
 FIND_PACKAGE(LZ4 REQUIRED)
 
+FIND_LIBRARY(TCMALLOC_LIB tcmalloc tcmalloc_minimal)
+IF(NOT TCMALLOC_LIB)
+  message(FATAL_ERROR "tcmalloc not found")
+ENDIF()
+
 SET(ALL_PBRT_LIBS
   pbrt
   pbrt_messages
@@ -553,7 +558,7 @@ ADD_SANITIZERS ( pbrt_exe )
 SET_TARGET_PROPERTIES ( pbrt_exe PROPERTIES OUTPUT_NAME pbrt )
 TARGET_COMPILE_FEATURES ( pbrt_exe PRIVATE ${PBRT_CXX11_FEATURES} )
 TARGET_LINK_LIBRARIES ( pbrt_exe ${ALL_PBRT_LIBS} -fno-builtin-malloc
-  -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -ljemalloc )
+  -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free ${TCMALLOC_LIB} )
 
 # Tools
 ADD_EXECUTABLE ( bsdftest src/tools/bsdftest.cpp )
@@ -623,7 +628,7 @@ ADD_SANITIZERS ( convert_treelet )
 SET_TARGET_PROPERTIES ( convert_treelet PROPERTIES OUTPUT_NAME "convert-treelet" )
 TARGET_COMPILE_FEATURES ( convert_treelet PRIVATE ${PBRT_CXX11_FEATURES} )
 TARGET_LINK_LIBRARIES ( convert_treelet ${ALL_PBRT_LIBS} -fno-builtin-malloc
-  -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free -ljemalloc )
+  -fno-builtin-calloc -fno-builtin-realloc -fno-builtin-free ${TCMALLOC_LIB} )
 
 # print-manifest
 ADD_EXECUTABLE ( print_manifest src/cloud/print-manifest.cpp )

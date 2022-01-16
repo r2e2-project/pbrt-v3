@@ -273,8 +273,8 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
     const auto included_texture_count = reader->read<uint32_t>();
     for (size_t i = 0; i < included_texture_count; i++) {
         const uint32_t id = reader->read<uint32_t>();
-
         const size_t len = reader->next_record_size();
+
         unique_ptr<char[]> storage{make_unique<char[]>(len)};
         reader->read(storage.get(), len);
 
