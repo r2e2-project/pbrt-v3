@@ -199,6 +199,10 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) {
                     dynamic_cast<AreaLight *>(
                         scene_lights_.at(u.area_light_id - 1)),
                     [](auto p) {});
+
+                if (area_light == nullptr) {
+                    throw runtime_error("failed to create the area light");
+                }
             }
         }
 
