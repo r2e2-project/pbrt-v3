@@ -116,6 +116,11 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
     }
 }
 
+CloudBVH::~CloudBVH() {
+    ParallelFor([&](int64_t treelet_id) { treelets_[treelet_id] = nullptr; },
+                treelets_.size());
+}
+
 void CloudBVH::checkIfTreeletIsLoaded(const uint32_t root_id) const {
     if (preloading_done_ or
         (treelets_.size() > root_id && treelets_.at(root_id) != nullptr)) {

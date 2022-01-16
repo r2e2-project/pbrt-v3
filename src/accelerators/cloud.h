@@ -48,6 +48,7 @@ class CloudBVH : public Aggregate {
   public:
     CloudBVH(const uint32_t bvh_root, const bool preload_all,
              const std::vector<std::shared_ptr<pbrt::Light>> *lights = nullptr);
+    ~CloudBVH();
 
     // disallow copying
     CloudBVH(const CloudBVH &) = delete;
