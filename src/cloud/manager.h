@@ -171,7 +171,11 @@ class SceneManager {
         return {tex.first.get(), tex.second};
     }
 
-    bool hasInMemoryTextures() const { return not inMemoryTextures.empty(); }
+    bool hasInMemoryTextures() const {
+        auto lock = syncTextureReads_ ? std::unique_lock<std::mutex>(mutex_)
+                                      : std::unique_lock<std::mutex>();
+        return not inMemoryTextures.empty();
+    }
 
     void addInMemoryImagePartition(const uint32_t pid, ImagePartition&& data) {
         std::lock_guard<std::mutex> lock{mutex_};
