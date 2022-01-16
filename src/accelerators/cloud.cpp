@@ -69,8 +69,7 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
 
         /* (1) load all the treelets in parallel */
         const auto treelet_count = _manager.treeletCount();
-
-        treelets_.resize(treelet_count + 1);
+        treelets_.resize(treelet_count);
 
         ParallelFor([&](int64_t treelet_id) { loadTreeletBase(treelet_id); },
                     treelet_count);

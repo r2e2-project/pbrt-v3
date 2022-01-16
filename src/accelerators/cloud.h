@@ -201,8 +201,8 @@ class CloudBVH : public Aggregate {
         std::make_shared<ConstantTexture<Float>>(0.f)};
 
     std::vector<std::unique_ptr<Treelet>> treelets_{};
-    std::map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_{};
-    std::map<uint32_t, std::shared_ptr<Material>> materials_{};
+    std::unordered_map<uint64_t, std::shared_ptr<Primitive>> bvh_instances_{};
+    std::unordered_map<uint32_t, std::shared_ptr<Material>> materials_{};
     std::map<uint32_t, std::pair<ParamSet, Transform>> area_light_params_{};
     std::vector<pbrt::Light *> scene_lights_{};
 
