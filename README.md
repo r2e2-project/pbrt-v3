@@ -67,6 +67,7 @@ apt package name):
 * `libunwind-dev`
 * `liblzma-dev`
 * `liblz4-dev`
+* `libgoogle-perftools-dev`
 
 Before building, you'll need to install each of these using your package manager.
 On Ubuntu this is done by running something of the form:
