@@ -181,16 +181,18 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) {
     MediumInterface medium_interface{};
 
     for (auto &ug : treelet.unfinished_geometric) {
+        auto &u = *ug;
+        shared_ptr<Shape> shape{move(u.shape)};
+
         /* do we need to make an area light for this guy? */
         shared_ptr<AreaLight> area_light;
 
-        auto &u = *ug;
         if (u.area_light_id) {
             if (scene_lights_.empty()) {
                 auto &light_data = area_light_params_.at(u.area_light_id);
                 area_light = CreateDiffuseAreaLight(light_data.second,
                                                     medium_interface.outside,
-                                                    light_data.first, u.shape);
+                                                    light_data.first, shape);
                 area_light->SetID(u.area_light_id + u.triangle_idx);
             } else {
                 area_light = shared_ptr<AreaLight>(
@@ -201,7 +203,7 @@ void CloudBVH::finalizeTreeletLoad(const uint32_t root_id) {
         }
 
         treelet.primitives[u.primitive_index] = make_unique<GeometricPrimitive>(
-            u.shape, materials_.at(u.material_key.id), area_light,
+            shape, materials_.at(u.material_key.id), area_light,
             medium_interface);
     }
 
@@ -385,13 +387,14 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
             const uint32_t instance_node = (uint32_t)instance_ref;
 
             if (instance_group == root_id) {
-                if (not tree_instances.count(instance_ref)) {
-                    tree_instances[instance_ref] =
+                if (not tree_instances.count(instance_node)) {
+                    tree_instances[instance_node] =
                         make_shared<IncludedInstance>(&treelet, instance_node);
                 }
 
                 tree_primitives.push_back(make_unique<TransformedPrimitive>(
-                    tree_instances[instance_ref], primitive_to_world));
+                    tree_instances.at(instance_node),
+                    move(primitive_to_world)));
             } else {
                 treelet.required_instances.insert(instance_group);
 
@@ -415,7 +418,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
 
             treelet.required_materials.insert(material_key);
 
-            auto shape = make_shared<Triangle>(
+            auto shape = make_unique<Triangle>(
                 &identity_transform_, &identity_transform_, false,
                 tree_meshes.at(mesh_id), tri_number);
 

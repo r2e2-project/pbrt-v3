@@ -120,25 +120,19 @@ class CloudBVH : public Aggregate {
         size_t primitive_index;
         MaterialKey material_key;
         uint32_t area_light_id;
-        std::shared_ptr<Shape> shape;
+        std::unique_ptr<Shape> shape;
         size_t triangle_idx;
 
         UnfinishedGeometricPrimitive(const size_t primitive_index,
                                      const MaterialKey &material_key,
                                      const uint32_t area_light_id,
-                                     std::shared_ptr<Shape> &&shape,
+                                     std::unique_ptr<Shape> &&shape,
                                      const size_t triangle_idx)
             : primitive_index(primitive_index),
               material_key(material_key),
               area_light_id(area_light_id),
               shape(std::move(shape)),
               triangle_idx(triangle_idx) {}
-
-        UnfinishedGeometricPrimitive(UnfinishedGeometricPrimitive &&) = default;
-        UnfinishedGeometricPrimitive(const UnfinishedGeometricPrimitive &) =
-            delete;
-        UnfinishedGeometricPrimitive &operator=(
-            const UnfinishedGeometricPrimitive &) = delete;
     };
 
     struct Treelet {
@@ -147,7 +141,7 @@ class CloudBVH : public Aggregate {
         std::vector<TreeletNode> nodes{};
         std::vector<std::unique_ptr<Primitive>> primitives{};
         std::vector<std::unique_ptr<Transform>> transforms{};
-        std::map<uint64_t, std::shared_ptr<Primitive>> instances{};
+        std::map<uint32_t, std::shared_ptr<Primitive>> instances{};
 
         std::set<MaterialKey> required_materials{};
         std::set<uint16_t> required_instances{};
