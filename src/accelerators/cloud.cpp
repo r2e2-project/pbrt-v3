@@ -397,11 +397,6 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
             const uint16_t instance_group = (uint16_t)(instance_ref >> 32);
             const uint32_t instance_node = (uint32_t)instance_ref;
 
-            if (instance_group >= treelets_.size()) {
-                throw runtime_error("invalid instance group: " +
-                                    to_string(instance_group));
-            }
-
             if (instance_group == root_id) {
                 if (not tree_instances.count(instance_node)) {
                     tree_instances[instance_node] =
