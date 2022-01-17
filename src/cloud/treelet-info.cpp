@@ -1,5 +1,5 @@
-#include <iostream>
 #include <fstream>
+#include <iostream>
 #include <memory>
 
 #include "cloud/manager.h"
@@ -20,23 +20,11 @@ void usage(const char *argv0) {
 }
 
 void print_treelet_info(const uint32_t treelet_id) {
-    vector<char> treelet_buffer;
-
     const string treelet_path =
         _manager.getScenePath() + "/" +
         _manager.getFileName(ObjectType::Treelet, treelet_id);
 
-    ifstream fin{treelet_path, ios::binary | ios::ate};
-
-    if (!fin.good()) {
-        throw runtime_error("Could not open treelet file: " + treelet_path);
-    }
-
-    streamsize size = fin.tellg();
-    fin.seekg(0, ios::beg);
-
-    treelet_buffer.resize(size);
-    fin.read(treelet_buffer.data(), size);
+    string treelet_buffer = roost::read_file(treelet_path);
 
     unique_ptr<RecordReader> reader;
     if (*reinterpret_cast<const uint32_t *>(treelet_buffer.data()) ==
@@ -46,6 +34,15 @@ void print_treelet_info(const uint32_t treelet_id) {
     } else {
         reader = make_unique<LiteRecordReader>(treelet_buffer.data(),
                                                treelet_buffer.size());
+    }
+
+    size_t total_image_partition_size = 0;
+    const uint32_t included_image_partitions = reader->read<uint32_t>();
+    for (size_t i = 0; i < included_image_partitions; i++) {
+        const uint32_t id = reader->read<uint32_t>();
+        const auto l = reader->next_record_size();
+        reader->read<string>();
+        total_image_partition_size += l;
     }
 
     size_t total_texture_size = 0;
@@ -86,7 +83,9 @@ void print_treelet_info(const uint32_t treelet_id) {
 
     const uint32_t included_mesh_count = reader->read<uint32_t>();
 
-    cout << "\u21b3 TEX:  " << included_texture_count << "  \033[38;5;242m"
+    cout << "\u21b3 PART: " << included_image_partitions << "  \033[38;5;242m"
+         << format_bytes(total_image_partition_size) << "\033[0m" << endl
+         << "\u21b3 TEX:  " << included_texture_count << "  \033[38;5;242m"
          << format_bytes(total_texture_size) << "\033[0m" << endl
          << "\u21b3 STEX: " << included_spectrum_count << "  \033[38;5;242m"
          << format_bytes(total_spectrum_size) << "\033[0m" << endl
