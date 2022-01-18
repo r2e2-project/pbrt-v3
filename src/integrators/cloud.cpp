@@ -10,6 +10,7 @@
 #include "core/paramset.h"
 #include "lights/pinfinite.h"
 #include "materials/matte.h"
+#include "util/defer.h"
 
 using namespace std;
 
@@ -24,9 +25,18 @@ STAT_INT_DISTRIBUTION("Integrator/Unused bounces per path", nRemainingBounces);
 
 STAT_COUNTER("Integrator/Calls to Shade", nShadeCalls);
 STAT_COUNTER("Integrator/Calls to Trace", nTraceCalls);
+STAT_COUNTER("Integrator/Total Trace time", totalTraceTime);
+STAT_COUNTER("Integrator/Total Shade time", totalShadeTime);
 
 RayStatePtr CloudIntegrator::Trace(RayStatePtr &&rayState,
                                    const CloudBVH &treelet) {
+    auto _ = defer([start_time = chrono::steady_clock::now()] {
+        const auto end_time = chrono::steady_clock::now();
+        totalTraceTime +=
+            chrono::duration_cast<chrono::nanoseconds>(end_time - start_time)
+                .count();
+    });
+
     nTraceCalls++;
     treelet.Trace(*rayState);
 
@@ -41,6 +51,13 @@ tuple<RayStatePtr, RayStatePtr, RayStatePtr> CloudIntegrator::Shade(
     RayStatePtr &&rayStatePtr, const CloudBVH &treelet, const Scene &scene,
     const Vector2i &sampleExtent, shared_ptr<GlobalSampler> &sampler,
     int maxPathDepth, MemoryArena &arena) {
+    auto _ = defer([start_time = chrono::steady_clock::now()] {
+        const auto end_time = chrono::steady_clock::now();
+        totalShadeTime +=
+            chrono::duration_cast<chrono::nanoseconds>(end_time - start_time)
+                .count();
+    });
+
     nShadeCalls++;
 
     static thread_local unique_ptr<LightDistribution> lightDistribution =
