@@ -11,6 +11,7 @@
 #include "messages/utils.h"
 #include "pbrt/main.h"
 #include "pbrt/raystate.h"
+#include "util/defer.h"
 
 using namespace std;
 
@@ -22,6 +23,8 @@ STAT_COUNTER("Integrator/Camera rays generated", nCameraRays);
 STAT_COUNTER("Integrator/Total rays traced", totalRays);
 STAT_COUNTER("Intersections/Regular ray intersection tests",
              nIntersectionTests);
+STAT_COUNTER("Integrator/Calls to Process", nProcessRayCalls);
+STAT_COUNTER("Integrator/Total Process time", totalProcessTime);
 
 void AccumulatedStats::Merge(const AccumulatedStats &other) {
     for (const auto &item : other.counters) {
@@ -227,6 +230,14 @@ namespace graphics {
 void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
                 scene::Base &sceneBase, MemoryArena &arena,
                 ProcessRayOutput &output) {
+    auto _ = defer([start_time = chrono::steady_clock::now()] {
+        const auto end_time = chrono::steady_clock::now();
+        totalProcessTime +=
+            chrono::duration_cast<chrono::nanoseconds>(end_time - start_time)
+                .count();
+    });
+
+    nProcessRayCalls++;
     auto &r = *rayStatePtr;
 
     output.pathId = r.PathID();
