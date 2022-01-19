@@ -183,7 +183,6 @@ class SceneManager {
     }
 
     ImagePartition& getInMemoryImagePartition(const uint32_t pid) {
-        std::lock_guard<std::mutex> lock{mutex_};
         return inMemoryImagePartitions.at(pid);
     }
 
