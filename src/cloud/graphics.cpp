@@ -270,9 +270,8 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
         return;
     } else if (r.needsImageSampling) {
         auto &p = _manager.getInMemoryImagePartition(r.imageSampleInfo.imageId);
-        auto Li = p.Lookup(r.imageSampleInfo.uv);
+        const auto Li = p.Lookup(r.imageSampleInfo.uv);
         r.Ld *= Li;
-        output.sample = move(rayStatePtr);
 
         if ((r.IsShadowRay() and r.remainingBounces == 0) ||
             (not r.IsShadowRay() and not r.IsLightRay() and
@@ -280,12 +279,15 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
             output.pathFinished = true;
         }
 
+        output.sample = move(rayStatePtr);
         return;
     } else {
         throw runtime_error("ProcessRay: invalid ray");
     }
 
-    if (!tracedRay) return;
+    if (!tracedRay) {
+        throw runtime_error("traced ray cannot be null");
+    }
 
     auto &ray = *tracedRay;
     const bool hit = ray.HasHit();
@@ -364,8 +366,8 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
                     bool isBlack = false;
                     auto pLight =
                         dynamic_cast<CloudInfiniteAreaLight *>(light.get());
-                    auto uv = pLight->Le_SampledPoint(ray.ray);
-                    auto img = pLight->GetPointImageInfo(uv, isBlack);
+                    const auto uv = pLight->Le_SampledPoint(ray.ray);
+                    const auto img = pLight->GetPointImageInfo(uv, isBlack);
 
                     if (!isBlack) {
                         ray.needsImageSampling = true;
