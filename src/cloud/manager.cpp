@@ -37,6 +37,15 @@ map<MaterialType, MaterialBlueprint> SceneManager::MaterialBlueprints = {
          {typeid(Float), "flatness", true},
          {typeid(Float), "difftrans", true},
          {typeid(Float), "bumpmap", true},
+     }}},
+    {MaterialType::Metal,
+     {{
+         {typeid(Spectrum), "eta", true},
+         {typeid(Spectrum), "k", true},
+         {typeid(Float), "roughness", true},
+         {typeid(Float), "uroughness", true},
+         {typeid(Float), "vroughness", true},
+         {typeid(bool), "remaproughness", true},
      }}}};
 
 ParamSet MaterialBlueprint::FilterParamSet(const ParamSet& src) {
