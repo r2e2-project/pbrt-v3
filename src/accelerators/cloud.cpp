@@ -49,11 +49,6 @@ CloudBVH::CloudBVH(const uint32_t bvh_root, const bool preload_all,
         }
     }
 
-    if (MaxThreadIndex() > 1 && !preload_all) {
-        throw runtime_error(
-            "Cannot use lazy-loading CloudBVH with multiple threads");
-    }
-
     // let's load all the area lights in the case that they are used by our
     // meshes
     auto reader = _manager.GetReader(ObjectType::AreaLights);
