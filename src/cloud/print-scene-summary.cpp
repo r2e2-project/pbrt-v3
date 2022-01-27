@@ -1,3 +1,4 @@
+#include <atomic>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -7,6 +8,7 @@
 #include "messages/compressed.h"
 #include "messages/lite.h"
 #include "messages/utils.h"
+#include "parallel.h"
 #include "util/exception.h"
 #include "util/path.h"
 
@@ -15,9 +17,7 @@ using namespace pbrt;
 
 auto &_manager = global::manager;
 
-void usage(const char *argv0) {
-    cerr << argv0 << " SCENE-PATH" << endl;
-}
+void usage(const char *argv0) { cerr << argv0 << " SCENE-PATH" << endl; }
 
 bool is_material_treelet(const uint32_t treelet_id) {
     const string treelet_path =
@@ -78,29 +78,33 @@ int main(int argc, char const *argv[]) {
 
         FLAGS_logtostderr = false;
         FLAGS_minloglevel = 3;
-        PbrtOptions.nThreads = 1;
 
         const roost::path scene_path{argv[1]};
         _manager.init(scene_path.string());
 
-        size_t total_material_size = 0;
-        size_t total_geometry_size = 0;
+        atomic<size_t> total_material_size{0};
+        atomic<size_t> total_geometry_size{0};
 
-        for (size_t i = 0; i < _manager.treeletCount(); i++) {
-            if (is_material_treelet(i)) {
-                total_material_size += roost::file_size(
-                    _manager.getFilePath(ObjectType::Treelet, i));
-            } else {
-                total_geometry_size += roost::file_size(
-                    _manager.getFilePath(ObjectType::Treelet, i));
-            }
-        }
+        ParallelInit();
+
+        ParallelFor(
+            [&](const uint64_t i) {
+                if (is_material_treelet(i)) {
+                    total_material_size += roost::file_size(
+                        _manager.getFilePath(ObjectType::Treelet, i));
+                } else {
+                    total_geometry_size += roost::file_size(
+                        _manager.getFilePath(ObjectType::Treelet, i));
+                }
+            },
+            _manager.treeletCount());
 
         cout << "total_material_size = " << total_material_size << " bytes"
              << endl
              << "total_geometry_size = " << total_geometry_size << " bytes"
              << endl;
 
+        ParallelCleanup();
     } catch (const exception &e) {
         print_exception(argv[0], e);
         return EXIT_FAILURE;
