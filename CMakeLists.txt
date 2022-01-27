@@ -621,6 +621,14 @@ SET_TARGET_PROPERTIES ( pbrt_treelet_info PROPERTIES OUTPUT_NAME "pbrt-treelet-i
 TARGET_COMPILE_FEATURES ( pbrt_treelet_info PRIVATE ${PBRT_CXX11_FEATURES} )
 TARGET_LINK_LIBRARIES ( pbrt_treelet_info ${ALL_PBRT_LIBS} )
 
+# print-scene-summary
+ADD_EXECUTABLE ( print_scene_summary src/cloud/print-scene-summary.cpp )
+ADD_SANITIZERS ( print_scene_summary )
+
+SET_TARGET_PROPERTIES ( print_scene_summary PROPERTIES OUTPUT_NAME "print-scene-summary" )
+TARGET_COMPILE_FEATURES ( print_scene_summary PRIVATE ${PBRT_CXX11_FEATURES} )
+TARGET_LINK_LIBRARIES ( print_scene_summary ${ALL_PBRT_LIBS} )
+
 # convert-treelet
 ADD_EXECUTABLE ( convert_treelet src/cloud/convert-treelet.cpp )
 ADD_SANITIZERS ( convert_treelet )
