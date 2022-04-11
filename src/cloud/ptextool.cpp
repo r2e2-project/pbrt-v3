@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <chrono>
 
 #include "cloud/manager.h"
 #include "messages/compressed.h"
@@ -155,6 +156,8 @@ int main(int argc, char *argv[]) {
     Ptex::String error;
     Ptex::PtexTexture *texture = cache->get("TEX0", error);
 
+    auto start = chrono::steady_clock::now();
+
     for (int i = 0; i < texture->numFaces(); i++) {
         float result[3];
         auto face_data = texture->getData(i);
@@ -173,6 +176,16 @@ int main(int argc, char *argv[]) {
 
             res_x--;
             res_y--;
+        }
+
+        if (chrono::steady_clock::now() - start > chrono::seconds{1}) {
+            start = chrono::steady_clock::now();
+
+            print_cache_stats(cache);
+            cache->purge(texture);
+            texture->release();
+            texture = cache->get("TEX0", error);
+            print_cache_stats(cache);
         }
     }
 
