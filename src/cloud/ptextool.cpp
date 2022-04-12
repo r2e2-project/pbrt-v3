@@ -1,6 +1,7 @@
 #include <Ptexture.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <fstream>
@@ -8,6 +9,7 @@
 #include <memory>
 #include <random>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "cloud/manager.h"
@@ -146,7 +148,7 @@ int main(int argc, char *argv[]) {
     }
 
     const string treelet_path{argv[1]};
-    const seconds total_runtime{30};
+    const seconds total_runtime{15};
 
     vector<size_t> texture_sizes;
 
@@ -165,62 +167,79 @@ int main(int argc, char *argv[]) {
     const size_t max_mem = 2 << 30;  // 1 GB
     const bool premultiply = true;
 
-    Ptex::PtexPtr<PtexCache> cache{
+    Ptex::PtexPtr<Ptex::PtexCache> cache{
         Ptex::PtexCache::create(max_files, max_mem, premultiply,
                                 &pbrt::in_memory_input_handler, nullptr)};
 
-    Ptex::String error;
-    Ptex::PtexPtr<Ptex::PtexTexture> texture{nullptr};
-
     const auto start_time = steady_clock::now();
-    auto last_status_time = steady_clock::now();
+    atomic<size_t> sampled_count{0};
 
-    // random_device rd;
-    mt19937 gen;
-    gen.seed(1000);
+    vector<thread> threads;
 
-    // randomly select textures relative to their size
-    discrete_distribution<size_t> texture_id_gen{texture_sizes.begin(),
-                                                 texture_sizes.end()};
+    for (size_t thread_id = 0; thread_id < 4; thread_id++) {
+        threads.emplace_back([&start_time, &total_runtime, &cache,
+                              &texture_sizes, &sampled_count] {
+            Ptex::String error;
+            Ptex::PtexPtr<Ptex::PtexTexture> texture{nullptr};
 
-    size_t sampled_count = 0;
-    for (auto now = steady_clock::now(); now - start_time <= total_runtime;
-         now = steady_clock::now()) {
-        const auto texture_id = texture_id_gen(gen);
+            mt19937 gen;
+            gen.seed(1000);
 
-        const string texture_name = "TEX" + to_string(texture_id);
-        texture.reset(cache->get(texture_name.c_str(), error));
+            // randomly select textures relative to their size
+            discrete_distribution<size_t> texture_id_gen{texture_sizes.begin(),
+                                                         texture_sizes.end()};
 
-        uniform_int_distribution<int> face_id_dist{0, texture->numFaces() - 1};
-        const int i = face_id_dist(gen);
+            for (auto now = steady_clock::now();
+                 now - start_time <= total_runtime; now = steady_clock::now()) {
+                const auto texname =
+                    "TEX" + to_string(0);  // texture_id_gen(gen));
+                texture.reset();
+                texture.reset(cache->get(texname.c_str(), error));
 
-        float result[3];
+                uniform_int_distribution<int> face_id_dist{
+                    0, texture->numFaces() - 1};
+                const int i = face_id_dist(gen);
 
-        // randomly select a resultion
-        Ptex::PtexPtr<Ptex::PtexFaceData> face_data{texture->getData(i)};
-        uniform_int_distribution<int8_t> ures_dist{0, face_data->res().ulog2};
-        uniform_int_distribution<int8_t> vres_dist{0, face_data->res().vlog2};
-        Ptex::Res res{ures_dist(gen), vres_dist(gen)};
+                float result[3];
 
-        // randomly select a pixel
-        uniform_int_distribution<int> x_dist{0, res.u() - 1};
-        uniform_int_distribution<int> y_dist{0, res.v() - 1};
-        face_data.reset(texture->getData(i, res));
-        face_data->getPixel(x_dist(gen), y_dist(gen), result);
-        sampled_count++;
+                // randomly select a resultion
+                Ptex::PtexPtr<Ptex::PtexFaceData> face_data{
+                    texture->getData(i)};
+                uniform_int_distribution<int8_t> ures_dist{
+                    0, face_data->res().ulog2};
+                uniform_int_distribution<int8_t> vres_dist{
+                    0, face_data->res().vlog2};
+                Ptex::Res res{ures_dist(gen), vres_dist(gen)};
 
-        // texture.reset(cache->get(texture_name.c_str(), error));
+                // randomly select a pixel
+                uniform_int_distribution<int> x_dist{0, res.u() - 1};
+                uniform_int_distribution<int> y_dist{0, res.v() - 1};
+                face_data.reset(texture->getData(i, res));
+                face_data->getPixel(x_dist(gen), y_dist(gen), result);
+                sampled_count++;
+            }
+        });
+    }
 
-        if (now - last_status_time >= seconds{1}) {
-            last_status_time = now;
-            const auto rss = get_current_rss();
+    while (true) {
+        const auto now = steady_clock::now();
+        const auto next_wake_up = now + seconds{1};
+        const auto rss = get_current_rss();
 
-            cerr << "\33[2K\r"
-                 << "Processed " << pbrt::format_num(sampled_count)
-                 << " samples"
-                 << ", RSS = " << pbrt::format_bytes(rss)
-                 << ", Ptex = " << pbrt::format_bytes(get_ptex_mem_used(cache));
+        cerr << "\33[2K\r"
+             << "Processed " << pbrt::format_num(sampled_count) << " samples"
+             << ", RSS = " << pbrt::format_bytes(rss)
+             << ", Ptex = " << pbrt::format_bytes(get_ptex_mem_used(cache));
+
+        if (now - start_time > total_runtime) {
+            break;
         }
+
+        this_thread::sleep_until(next_wake_up);
+    }
+
+    for (auto &thread : threads) {
+        thread.join();
     }
 
     cerr << endl;
