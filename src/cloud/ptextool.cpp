@@ -1,12 +1,12 @@
 #include <Ptexture.h>
 
+#include <chrono>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <memory>
 #include <string>
 #include <vector>
-#include <chrono>
 
 #include "cloud/manager.h"
 #include "messages/compressed.h"
@@ -67,10 +67,11 @@ class : public PtexInputHandler {
 
 }  // anonymous namespace
 
-pair<unique_ptr<char[]>, size_t> get_texture_data(const string &treelet_path,
-                                                  const uint32_t texture_id) {
+size_t load_all_textures(const string &treelet_path) {
     vector<char> treelet_buffer;
-    unique_ptr<char[]> result{nullptr};
+    size_t texture_count = 0;
+
+    unique_ptr<char[]> texture_buffer{nullptr};
 
     ifstream fin{treelet_path, ios::binary | ios::ate};
 
@@ -96,28 +97,27 @@ pair<unique_ptr<char[]>, size_t> get_texture_data(const string &treelet_path,
 
     reader->skip(reader->read<uint32_t>());
 
-    size_t total_texture_size = 0;
     const uint32_t included_texture_count = reader->read<uint32_t>();
     for (size_t i = 0; i < included_texture_count; i++) {
-        const uint32_t id = reader->read<uint32_t>();
-        const auto l = reader->next_record_size();
+        reader->skip(1);  // skipping the id
 
-        if (id == texture_id) {
-            result = make_unique<char[]>(l);
-            reader->read(result.get(), l);
-            return make_pair(move(result), l);
-        } else {
-            reader->skip(1);
-        }
+        const auto l = reader->next_record_size();
+        texture_buffer = make_unique<char[]>(l);
+        reader->read(texture_buffer.get(), l);
+
+        pbrt::global::manager.addInMemoryTexture(
+            "TEX" + to_string(texture_count), move(texture_buffer), l);
+
+        texture_count++;
     }
 
-    throw runtime_error("Texture not found: " + to_string(texture_id));
+    return texture_count;
 }
 
 }  // namespace pbrt
 
 void usage(const char *argv0) {
-    cerr << "Usage: " << argv0 << " TREELET-FILE TEXTURE-ID" << endl;
+    cerr << "Usage: " << argv0 << " TREELET-FILE" << endl;
 }
 
 void print_cache_stats(Ptex::PtexCache *cache) {
@@ -128,22 +128,17 @@ void print_cache_stats(Ptex::PtexCache *cache) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
+    if (argc != 2) {
         usage((argc <= 0) ? "ptextool" : argv[0]);
         return EXIT_FAILURE;
     }
 
     const string treelet_path{argv[1]};
-    const uint32_t texture_id = static_cast<uint32_t>(stoul(argv[2]));
 
-    {
-        auto raw_texture = pbrt::get_texture_data(treelet_path, texture_id);
-        pbrt::global::manager.addInMemoryTexture(
-            "TEX0", move(raw_texture.first), raw_texture.second);
-
-        cerr << "Texture " << texture_id << " loaded (" << raw_texture.second
-             << " bytes)." << endl;
-    }
+    cerr << "Loading all textures in the treelet... ";
+    const auto texture_count = pbrt::load_all_textures(treelet_path);
+    cerr << "done. (" << texture_count << " texture"
+         << (texture_count == 1 ? "" : "s") << " loaded)" << endl;
 
     const int max_files = 1000;
     const size_t max_mem = 0;
@@ -154,39 +149,36 @@ int main(int argc, char *argv[]) {
                                 &pbrt::in_memory_input_handler, nullptr);
 
     Ptex::String error;
-    Ptex::PtexTexture *texture = cache->get("TEX0", error);
+    Ptex::PtexTexture *texture = nullptr;
 
-    auto start = chrono::steady_clock::now();
+    for (size_t i = 0; i < texture_count; i++) {
+        const string texture_name = "TEX" + to_string(i);
+        texture = cache->get(texture_name.c_str(), error);
 
-    for (int i = 0; i < texture->numFaces(); i++) {
-        float result[3];
-        auto face_data = texture->getData(i);
-        auto res_x = face_data->res().ulog2;
-        auto res_y = face_data->res().vlog2;
+        cerr << "Processing " << texture_name << "... ";
 
-        while (res_x >= 0 && res_y >= 0) {
-            Ptex::Res new_res{res_x, res_y};
-            face_data = texture->getData(i, new_res);
+        for (int i = 0; i < texture->numFaces(); i++) {
+            float result[3];
+            auto face_data = texture->getData(i);
+            auto res_x = face_data->res().ulog2;
+            auto res_y = face_data->res().vlog2;
 
-            for (int x = 0; x < new_res.u(); x++) {
-                for (int y = 0; y < new_res.v(); y++) {
-                    face_data->getPixel(x, y, result);
+            while (res_x >= 0 && res_y >= 0) {
+                Ptex::Res new_res{res_x, res_y};
+                face_data = texture->getData(i, new_res);
+
+                for (int x = 0; x < new_res.u(); x++) {
+                    for (int y = 0; y < new_res.v(); y++) {
+                        face_data->getPixel(x, y, result);
+                    }
                 }
+
+                res_x--;
+                res_y--;
             }
-
-            res_x--;
-            res_y--;
         }
 
-        if (chrono::steady_clock::now() - start > chrono::seconds{1}) {
-            start = chrono::steady_clock::now();
-
-            print_cache_stats(cache);
-            cache->purge(texture);
-            texture->release();
-            texture = cache->get("TEX0", error);
-            print_cache_stats(cache);
-        }
+        cerr << "done." << endl;
     }
 
     return EXIT_SUCCESS;
