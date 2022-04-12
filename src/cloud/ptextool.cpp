@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@
 #include "util/util.h"
 
 using namespace std;
+using namespace chrono;
 
 namespace pbrt {
 
@@ -69,9 +71,9 @@ class : public PtexInputHandler {
 
 }  // anonymous namespace
 
-size_t load_all_textures(const string &treelet_path) {
+void load_all_textures(const string &treelet_path,
+                       vector<size_t> &texture_sizes) {
     vector<char> treelet_buffer;
-    size_t texture_count = 0;
 
     unique_ptr<char[]> texture_buffer{nullptr};
 
@@ -107,13 +109,11 @@ size_t load_all_textures(const string &treelet_path) {
         texture_buffer = make_unique<char[]>(l);
         reader->read(texture_buffer.get(), l);
 
-        pbrt::global::manager.addInMemoryTexture(
-            "TEX" + to_string(texture_count), move(texture_buffer), l);
+        pbrt::global::manager.addInMemoryTexture("TEX" + to_string(i),
+                                                 move(texture_buffer), l);
 
-        texture_count++;
+        texture_sizes.push_back(l);
     }
-
-    return texture_count;
 }
 
 }  // namespace pbrt
@@ -122,11 +122,10 @@ void usage(const char *argv0) {
     cerr << "Usage: " << argv0 << " TREELET-FILE" << endl;
 }
 
-void print_cache_stats(Ptex::PtexCache *cache) {
+uint64_t get_ptex_mem_used(Ptex::PtexCache *cache) {
     Ptex::PtexCache::Stats stats;
     cache->getStats(stats);
-    cout << "[PTEX] memUsed=" << stats.memUsed
-         << ",peakMemUsed=" << stats.peakMemUsed << endl;
+    return stats.memUsed;
 }
 
 uint64_t get_current_rss() {
@@ -147,14 +146,23 @@ int main(int argc, char *argv[]) {
     }
 
     const string treelet_path{argv[1]};
+    const seconds total_runtime{60};
+
+    vector<size_t> texture_sizes;
 
     cerr << "Loading all textures in the treelet... ";
-    const auto texture_count = pbrt::load_all_textures(treelet_path);
+    pbrt::load_all_textures(treelet_path, texture_sizes);
+    const auto texture_count = texture_sizes.size();
     cerr << "done. (" << texture_count << " texture"
          << (texture_count == 1 ? "" : "s") << " loaded)" << endl;
 
+    if (texture_count == 0) {
+        cerr << "Not textures found, exiting." << endl;
+        return EXIT_FAILURE;
+    }
+
     const int max_files = 1000;
-    const size_t max_mem = 0;
+    const size_t max_mem = 2 << 30;  // 1 GB
     const bool premultiply = true;
 
     PtexCache *cache =
@@ -164,39 +172,53 @@ int main(int argc, char *argv[]) {
     Ptex::String error;
     Ptex::PtexTexture *texture = nullptr;
 
-    auto start = chrono::steady_clock::now();
+    const auto start_time = steady_clock::now();
+    auto last_status_time = steady_clock::now();
 
-    for (size_t texture_id = 0; texture_id < texture_count; texture_id++) {
+    random_device rd;
+    mt19937 gen(rd());
+
+    // randomly select textures relative to their size
+    discrete_distribution<size_t> texture_id_gen{texture_sizes.begin(),
+                                                 texture_sizes.end()};
+
+    size_t sampled_count = 0;
+    for (auto now = steady_clock::now(); now - start_time <= total_runtime;
+         now = steady_clock::now()) {
+        const auto texture_id = texture_id_gen(gen);
+
         const string texture_name = "TEX" + to_string(texture_id);
         texture = cache->get(texture_name.c_str(), error);
 
-        for (int i = 0; i < texture->numFaces(); i++) {
-            float result[3];
-            auto face_data = texture->getData(i);
-            auto res_x = face_data->res().ulog2;
-            auto res_y = face_data->res().vlog2;
+        uniform_int_distribution<int> face_id_dist{0, texture->numFaces() - 1};
+        const int i = face_id_dist(gen);
 
-            while (res_x >= 0 && res_y >= 0) {
-                Ptex::Res new_res{res_x, res_y};
-                face_data = texture->getData(i, new_res);
+        float result[3];
+        auto face_data = texture->getData(i);
 
-                for (int x = 0; x < new_res.u(); x++) {
-                    for (int y = 0; y < new_res.v(); y++) {
-                        face_data->getPixel(x, y, result);
-                    }
-                }
+        // randomly select a resultion
+        uniform_int_distribution<int8_t> ures_dist{0, face_data->res().ulog2};
+        uniform_int_distribution<int8_t> vres_dist{0, face_data->res().vlog2};
+        Ptex::Res res{ures_dist(gen), vres_dist(gen)};
 
-                res_x--;
-                res_y--;
-            }
+        // randomly select a pixel
+        uniform_int_distribution<int> x_dist{0, res.u() - 1};
+        uniform_int_distribution<int> y_dist{0, res.v() - 1};
+        face_data = texture->getData(i, res);
+        face_data->getPixel(x_dist(gen), y_dist(gen), result);
+        sampled_count++;
 
-            if (chrono::steady_clock::now() - start >= chrono::seconds{1}) {
-                start = chrono::steady_clock::now();
-                const auto rss = get_current_rss();
-                cerr << "\33[2K\r"
-                     << "Processed " << texture_id << "/" << texture_count
-                     << ", RSS = " << pbrt::format_bytes(rss);
-            }
+        texture->release();
+
+        if (now - last_status_time >= seconds{1}) {
+            last_status_time = now;
+            const auto rss = get_current_rss();
+
+            cerr << "\33[2K\r"
+                 << "Processed " << pbrt::format_num(sampled_count)
+                 << " samples"
+                 << ", RSS = " << pbrt::format_bytes(rss)
+                 << ", Ptex = " << pbrt::format_bytes(get_ptex_mem_used(cache));
         }
     }
 
