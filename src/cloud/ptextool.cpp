@@ -1,4 +1,5 @@
 #include <Ptexture.h>
+#include <unistd.h>
 
 #include <chrono>
 #include <cstdlib>
@@ -11,6 +12,7 @@
 #include "cloud/manager.h"
 #include "messages/compressed.h"
 #include "messages/lite.h"
+#include "util/util.h"
 
 using namespace std;
 
@@ -127,6 +129,17 @@ void print_cache_stats(Ptex::PtexCache *cache) {
          << ",peakMemUsed=" << stats.peakMemUsed << endl;
 }
 
+uint64_t get_current_rss() {
+    static const int pagesize = getpagesize();
+
+    ifstream fin{"/proc/self/statm"};
+
+    uint64_t size, resident, shared, text, lib, data, dt;
+    fin >> size >> resident >> shared >> text >> lib >> data >> dt;
+
+    return resident * pagesize;
+}
+
 int main(int argc, char *argv[]) {
     if (argc != 2) {
         usage((argc <= 0) ? "ptextool" : argv[0]);
@@ -151,11 +164,11 @@ int main(int argc, char *argv[]) {
     Ptex::String error;
     Ptex::PtexTexture *texture = nullptr;
 
-    for (size_t i = 0; i < texture_count; i++) {
-        const string texture_name = "TEX" + to_string(i);
-        texture = cache->get(texture_name.c_str(), error);
+    auto start = chrono::steady_clock::now();
 
-        cerr << "Processing " << texture_name << "... ";
+    for (size_t texture_id = 0; texture_id < texture_count; texture_id++) {
+        const string texture_name = "TEX" + to_string(texture_id);
+        texture = cache->get(texture_name.c_str(), error);
 
         for (int i = 0; i < texture->numFaces(); i++) {
             float result[3];
@@ -176,10 +189,18 @@ int main(int argc, char *argv[]) {
                 res_x--;
                 res_y--;
             }
-        }
 
-        cerr << "done." << endl;
+            if (chrono::steady_clock::now() - start >= chrono::seconds{1}) {
+                start = chrono::steady_clock::now();
+                const auto rss = get_current_rss();
+                cerr << "\33[2K\r"
+                     << "Processed " << texture_id << "/" << texture_count
+                     << ", RSS = " << pbrt::format_bytes(rss);
+            }
+        }
     }
+
+    cerr << endl;
 
     return EXIT_SUCCESS;
 }
