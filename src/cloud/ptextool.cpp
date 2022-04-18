@@ -7,6 +7,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <random>
 #include <string>
 #include <thread>
@@ -121,7 +122,7 @@ void load_all_textures(const string &treelet_path,
 }  // namespace pbrt
 
 void usage(const char *argv0) {
-    cerr << "Usage: " << argv0 << " TREELET-FILE" << endl;
+    cerr << "Usage: " << argv0 << " TREELET-FILE TIME THREADS" << endl;
 }
 
 uint64_t get_ptex_mem_used(Ptex::PtexCache *cache) {
@@ -142,13 +143,14 @@ uint64_t get_current_rss() {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 2) {
+    if (argc != 4) {
         usage((argc <= 0) ? "ptextool" : argv[0]);
         return EXIT_FAILURE;
     }
 
     const string treelet_path{argv[1]};
-    const seconds total_runtime{15};
+    const seconds total_runtime{stoul(argv[2])};
+    const size_t thread_count{stoul(argv[3])};
 
     vector<size_t> texture_sizes;
 
@@ -164,7 +166,7 @@ int main(int argc, char *argv[]) {
     }
 
     const int max_files = 1000;
-    const size_t max_mem = 2 << 30;  // 1 GB
+    const size_t max_mem = 1 << 30;  // 1 GB
     const bool premultiply = true;
 
     Ptex::PtexPtr<Ptex::PtexCache> cache{
@@ -176,7 +178,7 @@ int main(int argc, char *argv[]) {
 
     vector<thread> threads;
 
-    for (size_t thread_id = 0; thread_id < 4; thread_id++) {
+    for (size_t thread_id = 0; thread_id < thread_count; thread_id++) {
         threads.emplace_back([&start_time, &total_runtime, &cache,
                               &texture_sizes, &sampled_count] {
             Ptex::String error;
