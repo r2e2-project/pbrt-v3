@@ -166,7 +166,7 @@ int main(int argc, char *argv[]) {
     }
 
     const int max_files = 1000;
-    const size_t max_mem = 1 << 30;  // 1 GB
+    const size_t max_mem = 1ull << 30;  // 1 GB
     const bool premultiply = true;
 
     Ptex::PtexPtr<Ptex::PtexCache> cache{
