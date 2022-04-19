@@ -621,13 +621,13 @@ SET_TARGET_PROPERTIES ( pbrt_treelet_info PROPERTIES OUTPUT_NAME "pbrt-treelet-i
 TARGET_COMPILE_FEATURES ( pbrt_treelet_info PRIVATE ${PBRT_CXX11_FEATURES} )
 TARGET_LINK_LIBRARIES ( pbrt_treelet_info ${ALL_PBRT_LIBS} )
 
-# pbrt-ptextool
-ADD_EXECUTABLE ( pbrt_ptextool src/cloud/ptextool.cpp )
-ADD_SANITIZERS ( pbrt_ptextool )
+# pbrt-ptexbench
+ADD_EXECUTABLE ( pbrt_ptexbench src/cloud/ptexbench.cpp )
+ADD_SANITIZERS ( pbrt_ptexbench )
 
-SET_TARGET_PROPERTIES ( pbrt_ptextool PROPERTIES OUTPUT_NAME "pbrt-ptextool" )
-TARGET_COMPILE_FEATURES ( pbrt_ptextool PRIVATE ${PBRT_CXX11_FEATURES} )
-TARGET_LINK_LIBRARIES ( pbrt_ptextool ${ALL_PBRT_LIBS} )
+SET_TARGET_PROPERTIES ( pbrt_ptexbench PROPERTIES OUTPUT_NAME "pbrt-ptexbench" )
+TARGET_COMPILE_FEATURES ( pbrt_ptexbench PRIVATE ${PBRT_CXX11_FEATURES} )
+TARGET_LINK_LIBRARIES ( pbrt_ptexbench ${ALL_PBRT_LIBS} )
 
 # print-scene-summary
 ADD_EXECUTABLE ( print_scene_summary src/cloud/print-scene-summary.cpp )

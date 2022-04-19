@@ -147,7 +147,7 @@ uint64_t get_current_rss() {
 
 int main(int argc, char *argv[]) {
     if (argc != 5) {
-        usage((argc <= 0) ? "ptextool" : argv[0]);
+        usage((argc <= 0) ? "ptexbench" : argv[0]);
         return EXIT_FAILURE;
     }
 
