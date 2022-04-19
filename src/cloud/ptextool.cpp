@@ -3,8 +3,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <mutex>
@@ -122,7 +124,8 @@ void load_all_textures(const string &treelet_path,
 }  // namespace pbrt
 
 void usage(const char *argv0) {
-    cerr << "Usage: " << argv0 << " TREELET-FILE TIME THREADS" << endl;
+    cerr << "Usage: " << argv0 << " TREELET-FILE TIME THREADS MAXMEM_MB"
+         << endl;
 }
 
 uint64_t get_ptex_mem_used(Ptex::PtexCache *cache) {
@@ -143,7 +146,7 @@ uint64_t get_current_rss() {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 4) {
+    if (argc != 5) {
         usage((argc <= 0) ? "ptextool" : argv[0]);
         return EXIT_FAILURE;
     }
@@ -151,6 +154,14 @@ int main(int argc, char *argv[]) {
     const string treelet_path{argv[1]};
     const seconds total_runtime{stoul(argv[2])};
     const size_t thread_count{stoul(argv[3])};
+    const size_t max_mem{stoul(argv[4]) * 1024 * 1024};
+
+    cerr << "* Configuration" << endl
+         << "  - Treelet    = " << treelet_path << endl 
+         << "  - Max memory = " << pbrt::format_bytes(max_mem) << endl
+         << "  - Total time = " << total_runtime.count() << "s" << endl
+         << "  - Threads    = " << thread_count << endl
+         << endl;
 
     vector<size_t> texture_sizes;
 
@@ -158,7 +169,8 @@ int main(int argc, char *argv[]) {
     pbrt::load_all_textures(treelet_path, texture_sizes);
     const auto texture_count = texture_sizes.size();
     cerr << "done. (" << texture_count << " texture"
-         << (texture_count == 1 ? "" : "s") << " loaded)" << endl;
+         << (texture_count == 1 ? "" : "s") << " loaded)" << endl
+         << endl;
 
     if (texture_count == 0) {
         cerr << "Not textures found, exiting." << endl;
@@ -166,7 +178,6 @@ int main(int argc, char *argv[]) {
     }
 
     const int max_files = 1000;
-    const size_t max_mem = 1ull << 30;  // 1 GB
     const bool premultiply = true;
 
     Ptex::PtexPtr<Ptex::PtexCache> cache{
@@ -193,8 +204,7 @@ int main(int argc, char *argv[]) {
 
             for (auto now = steady_clock::now();
                  now - start_time <= total_runtime; now = steady_clock::now()) {
-                const auto texname =
-                    "TEX" + to_string(0);  // texture_id_gen(gen));
+                const auto texname = "TEX" + to_string(texture_id_gen(gen));
                 texture.reset();
                 texture.reset(cache->get(texname.c_str(), error));
 
@@ -244,7 +254,11 @@ int main(int argc, char *argv[]) {
         thread.join();
     }
 
-    cerr << endl;
+    cerr << endl << endl;
+
+    cerr << "=> Rate: "
+         << pbrt::format_num(ceil(1.0 * sampled_count / total_runtime.count()))
+         << " samples/sec" << endl;
 
     return EXIT_SUCCESS;
 }
