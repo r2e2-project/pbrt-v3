@@ -157,7 +157,7 @@ int main(int argc, char *argv[]) {
     const size_t max_mem{stoul(argv[4]) * 1024 * 1024};
 
     cerr << "* Configuration" << endl
-         << "  - Treelet    = " << treelet_path << endl 
+         << "  - Treelet    = " << treelet_path << endl
          << "  - Max memory = " << pbrt::format_bytes(max_mem) << endl
          << "  - Total time = " << total_runtime.count() << "s" << endl
          << "  - Threads    = " << thread_count << endl
@@ -215,19 +215,18 @@ int main(int argc, char *argv[]) {
                 float result[3];
 
                 // randomly select a resultion
-                Ptex::PtexPtr<Ptex::PtexFaceData> face_data{
-                    texture->getData(i)};
-                uniform_int_distribution<int8_t> ures_dist{
-                    0, face_data->res().ulog2};
-                uniform_int_distribution<int8_t> vres_dist{
-                    0, face_data->res().vlog2};
+                const auto &info = texture->getFaceInfo(i);
+                uniform_int_distribution<int8_t> ures_dist{0, info.res.ulog2};
+                uniform_int_distribution<int8_t> vres_dist{0, info.res.vlog2};
                 Ptex::Res res{ures_dist(gen), vres_dist(gen)};
 
                 // randomly select a pixel
                 uniform_int_distribution<int> x_dist{0, res.u() - 1};
                 uniform_int_distribution<int> y_dist{0, res.v() - 1};
-                face_data.reset(texture->getData(i, res));
-                face_data->getPixel(x_dist(gen), y_dist(gen), result);
+
+                texture->getPixel(i, x_dist(gen), y_dist(gen), result, 0,
+                                  texture->numChannels(), res);
+
                 sampled_count++;
             }
         });
