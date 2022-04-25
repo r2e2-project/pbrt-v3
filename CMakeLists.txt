@@ -629,6 +629,14 @@ SET_TARGET_PROPERTIES ( pbrt_ptexbench PROPERTIES OUTPUT_NAME "pbrt-ptexbench" )
 TARGET_COMPILE_FEATURES ( pbrt_ptexbench PRIVATE ${PBRT_CXX11_FEATURES} )
 TARGET_LINK_LIBRARIES ( pbrt_ptexbench ${ALL_PBRT_LIBS} )
 
+# pbrt-ptexpand
+ADD_EXECUTABLE ( pbrt_ptexpand src/cloud/ptexpand.cpp )
+ADD_SANITIZERS ( pbrt_ptexpand )
+
+SET_TARGET_PROPERTIES ( pbrt_ptexpand PROPERTIES OUTPUT_NAME "pbrt-ptexpand" )
+TARGET_COMPILE_FEATURES ( pbrt_ptexpand PRIVATE ${PBRT_CXX11_FEATURES} )
+TARGET_LINK_LIBRARIES ( pbrt_ptexpand ${ALL_PBRT_LIBS} )
+
 # print-scene-summary
 ADD_EXECUTABLE ( print_scene_summary src/cloud/print-scene-summary.cpp )
 ADD_SANITIZERS ( print_scene_summary )
