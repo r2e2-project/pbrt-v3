@@ -1,7 +1,9 @@
+#include <glog/logging.h>
 
 #include <iostream>
 
 #include "cloud/ptex/expanded.h"
+#include "util/util.h"
 
 using namespace std;
 using namespace pbrt;
@@ -16,6 +18,10 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    google::InitGoogleLogging(argv[0]);
+    FLAGS_logtostderr = true;
+    FLAGS_minloglevel = 0;  // INFO
+
     const string ptex_file{argv[1]};
 
     Ptex::String error;
@@ -28,18 +34,21 @@ int main(int argc, char *argv[]) {
 
     const auto num_faces = ptex_texture->numFaces();
 
-    cerr << "* Texture info: " << endl << "  - Faces = " << num_faces << endl;
+    LOG(INFO) << "* Texture info: " << endl
+              << "  - Faces = " << num_faces << endl;
+
     size_t expanded_size = 0;
 
     for (int i = 0; i < num_faces; i++) {
         auto &face_info = ptex_texture->getFaceInfo(i);
 
-        // cerr << "[F" << i << "] res=" << static_cast<int>(face_info.res.u())
-        //      << "x" << static_cast<int>(face_info.res.v())
-        //      << ", logres=" << static_cast<int>(face_info.res.ulog2) << "x"
-        //      << static_cast<int>(face_info.res.vlog2) << boolalpha
-        //      << ", edits=" << face_info.hasEdits()
-        //      << ", subface=" << face_info.isSubface() << endl;
+        LOG_EVERY_N(INFO, 100)
+            << "[F" << i << "] res=" << static_cast<int>(face_info.res.u())
+            << "x" << static_cast<int>(face_info.res.v())
+            << ", logres=" << static_cast<int>(face_info.res.ulog2) << "x"
+            << static_cast<int>(face_info.res.vlog2) << boolalpha
+            << ", edits=" << face_info.hasEdits()
+            << ", subface=" << face_info.isSubface();
 
         if (face_info.res.ulog2 < 0 or face_info.res.vlog2 < 0) {
             throw runtime_error("unsupported face resolution");
@@ -50,10 +59,6 @@ int main(int argc, char *argv[]) {
                 Ptex::Res new_res{res_u, res_v};
                 PtexFaceData *raw_data = ptex_texture->getData(i, new_res);
                 const auto encoding = ExpandedPtex::get_face_encoding(raw_data);
-
-                // cerr << "  (" << static_cast<int>(res_u) << "x"
-                //      << static_cast<int>(res_v) << ") enc=" << encoding
-                //      << flush;
 
                 if (encoding == ExpandedPtex::FaceEncoding::Tiled ||
                     encoding == ExpandedPtex::FaceEncoding::TiledReduced) {
@@ -67,19 +72,17 @@ int main(int argc, char *argv[]) {
                     for (auto &d : data) total_len += d.second;
 
                     expanded_size += total_len;
-                    // cerr << ", len=" << total_len << endl;
                 } else {
                     auto data = ExpandedPtex::get_data(
                         raw_data, ptex_texture->pixelsize());
 
                     expanded_size += data.second;
-                    // cerr << ", len=" << data.second << endl;
                 }
             }
         }
     }
 
-    cout << "  - Expanded size = " << expanded_size << endl;
+    LOG(INFO) << "Expanded size = " << format_bytes(expanded_size) << endl;
 
     return EXIT_SUCCESS;
 }
