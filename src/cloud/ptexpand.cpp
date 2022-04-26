@@ -3,6 +3,7 @@
 #include <iostream>
 
 #include "cloud/ptex/expanded.h"
+#include "util/path.h"
 #include "util/util.h"
 
 using namespace std;
@@ -22,6 +23,7 @@ int main(int argc, char *argv[]) {
     google::InitGoogleLogging(argv[0]);
     FLAGS_logtostderr = true;
     FLAGS_minloglevel = 0;  // INFO
+    FLAGS_colorlogtostderr = true;
 
     const string ptex_file{argv[1]};
 
@@ -35,8 +37,17 @@ int main(int argc, char *argv[]) {
 
     const auto num_faces = ptex_texture->numFaces();
 
-    LOG(INFO) << "* Texture info: " << endl
-              << "  - Faces = " << num_faces << endl;
+    LOG(WARNING) << "* Texture info: " << endl
+                 << "  - Size      = "
+                 << pbrt::format_bytes(pbrt::roost::file_size(ptex_file))
+                 << endl
+                 << "  - Faces     = " << num_faces << endl
+                 << "  - Mesh type = "
+                 << ((ptex_texture->header().meshtype == Ptex::mt_triangle)
+                         ? "triangle"
+                         : "quad");
+
+    CHECK_NE(ptex_texture->header().meshtype, Ptex::mt_triangle);
 
     size_t expanded_size = 0;
 
