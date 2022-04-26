@@ -1,86 +1,10 @@
 
 #include <iostream>
 
-//
-
-#include <PtexReader.h>
-#include <Ptexture.h>
+#include "cloud/ptex/expanded.h"
 
 using namespace std;
-
-namespace pbrt {
-
-class ExpandedPtex : public Ptex::PtexReader {
-  public:
-    enum class FaceEncoding {
-        ConstDataPtr,
-        Constant,
-        Tiled,
-        Packed,
-        TiledReducedFace,
-        Error,
-    };
-
-    static FaceEncoding get_face_encoding(const PtexFaceData *face_data) {
-        if (dynamic_cast<const ConstDataPtr *>(face_data)) {
-            return FaceEncoding::ConstDataPtr;
-        }
-        if (dynamic_cast<const ConstantFace *>(face_data)) {
-            return FaceEncoding::Constant;
-        }
-        if (dynamic_cast<const TiledFace *>(face_data)) {
-            return FaceEncoding::Tiled;
-        }
-        if (dynamic_cast<const TiledReducedFace *>(face_data)) {
-            return FaceEncoding::TiledReducedFace;
-        }
-        if (dynamic_cast<const PackedFace *>(face_data)) {
-            return FaceEncoding::Packed;
-        }
-        if (dynamic_cast<const ErrorFace *>(face_data)) {
-            throw runtime_error("encountered error face");
-        }
-
-        throw runtime_error("unknown face encoding");
-    }
-};
-
-}  // namespace pbrt
-
 using namespace pbrt;
-
-std::ostream &operator<<(std::ostream &os,
-                         const ExpandedPtex::FaceEncoding &fe) {
-    switch (fe) {
-    case ExpandedPtex::FaceEncoding::ConstDataPtr:
-        os << "ConstDataPtr";
-        break;
-
-    case ExpandedPtex::FaceEncoding::Constant:
-        os << "Constant";
-        break;
-
-    case ExpandedPtex::FaceEncoding::Tiled:
-        os << "Tiled";
-        break;
-
-    case ExpandedPtex::FaceEncoding::Packed:
-        os << "Packed";
-        break;
-
-    case ExpandedPtex::FaceEncoding::Error:
-        os << "Error";
-        break;
-
-    case ExpandedPtex::FaceEncoding::TiledReducedFace:
-        os << "TiledReducedFace";
-        break;
-
-    default:
-        os << "Unknown";
-    }
-    return os;
-}
 
 void usage(const char *argv0) {
     cerr << "Usage: " << argv0 << " INPUT" << endl;
@@ -105,28 +29,57 @@ int main(int argc, char *argv[]) {
     const auto num_faces = ptex_texture->numFaces();
 
     cerr << "* Texture info: " << endl << "  - Faces = " << num_faces << endl;
+    size_t expanded_size = 0;
 
     for (int i = 0; i < num_faces; i++) {
         auto &face_info = ptex_texture->getFaceInfo(i);
 
-        cerr << "[F" << i << "]" << endl;
+        // cerr << "[F" << i << "] res=" << static_cast<int>(face_info.res.u())
+        //      << "x" << static_cast<int>(face_info.res.v())
+        //      << ", logres=" << static_cast<int>(face_info.res.ulog2) << "x"
+        //      << static_cast<int>(face_info.res.vlog2) << boolalpha
+        //      << ", edits=" << face_info.hasEdits()
+        //      << ", subface=" << face_info.isSubface() << endl;
 
         if (face_info.res.ulog2 < 0 or face_info.res.vlog2 < 0) {
             throw runtime_error("unsupported face resolution");
         }
 
-        for (int8_t res_u = 0; res_u <= face_info.res.ulog2; res_u++) {
-            for (int8_t res_v = 0; res_v <= face_info.res.vlog2; res_v++) {
+        for (int8_t res_u = face_info.res.ulog2; res_u >= 0; res_u--) {
+            for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
                 Ptex::Res new_res{res_u, res_v};
-                PtexFaceData *data = ptex_texture->getData(i, new_res);
+                PtexFaceData *raw_data = ptex_texture->getData(i, new_res);
+                const auto encoding = ExpandedPtex::get_face_encoding(raw_data);
 
-                cerr << "  (" << static_cast<int>(res_u) << "x"
-                     << static_cast<int>(res_v)
-                     << ") enc=" << ExpandedPtex::get_face_encoding(data)
-                     << endl;
+                // cerr << "  (" << static_cast<int>(res_u) << "x"
+                //      << static_cast<int>(res_v) << ") enc=" << encoding
+                //      << flush;
+
+                if (encoding == ExpandedPtex::FaceEncoding::Tiled ||
+                    encoding == ExpandedPtex::FaceEncoding::TiledReduced) {
+                    auto data = (encoding == ExpandedPtex::FaceEncoding::Tiled)
+                                    ? ExpandedPtex::get_tiled_data(
+                                          raw_data, ptex_texture->pixelsize())
+                                    : ExpandedPtex::get_reduced_tile_data(
+                                          raw_data, ptex_texture->pixelsize());
+
+                    size_t total_len = 0;
+                    for (auto &d : data) total_len += d.second;
+
+                    expanded_size += total_len;
+                    // cerr << ", len=" << total_len << endl;
+                } else {
+                    auto data = ExpandedPtex::get_data(
+                        raw_data, ptex_texture->pixelsize());
+
+                    expanded_size += data.second;
+                    // cerr << ", len=" << data.second << endl;
+                }
             }
         }
     }
+
+    cout << "  - Expanded size = " << expanded_size << endl;
 
     return EXIT_SUCCESS;
 }
