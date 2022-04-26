@@ -7,6 +7,7 @@
 
 using namespace std;
 using namespace pbrt;
+using namespace pbrt::ptex::util;
 
 void usage(const char *argv0) {
     cerr << "Usage: " << argv0 << " INPUT" << endl;
@@ -62,23 +63,24 @@ int main(int argc, char *argv[]) {
             for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
                 Ptex::Res new_res{res_u, res_v};
                 PtexFaceData *raw_data = ptex_texture->getData(i, new_res);
-                const auto encoding = ExpandedPtex::get_face_encoding(raw_data);
+                const auto encoding = get_face_encoding(raw_data);
 
-                if (encoding == ExpandedPtex::FaceEncoding::Tiled ||
-                    encoding == ExpandedPtex::FaceEncoding::TiledReduced) {
-                    auto data = (encoding == ExpandedPtex::FaceEncoding::Tiled)
-                                    ? ExpandedPtex::get_tiled_data(
-                                          raw_data, ptex_texture->pixelsize())
-                                    : ExpandedPtex::get_reduced_tile_data(
-                                          raw_data, ptex_texture->pixelsize());
+                if (encoding == FaceEncoding::Tiled ||
+                    encoding == FaceEncoding::TiledReduced) {
+                    auto tiles_data =
+                        (encoding == FaceEncoding::Tiled)
+                            ? get_tiled_data<Ptex::PtexReader::TiledFace>(
+                                  raw_data, ptex_texture->pixelsize())
+                            : get_tiled_data<
+                                  Ptex::PtexReader::TiledReducedFace>(
+                                  raw_data, ptex_texture->pixelsize());
 
                     size_t total_len = 0;
-                    for (auto &d : data) total_len += d.second;
+                    for (auto &d : tiles_data) total_len += d.second;
 
                     expanded_size += total_len;
                 } else {
-                    auto data = ExpandedPtex::get_data(
-                        raw_data, ptex_texture->pixelsize());
+                    auto data = get_data(raw_data, ptex_texture->pixelsize());
 
                     expanded_size += data.second;
                 }
