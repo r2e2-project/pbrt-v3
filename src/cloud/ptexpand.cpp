@@ -42,13 +42,17 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < num_faces; i++) {
         auto &face_info = ptex_texture->getFaceInfo(i);
 
-        LOG_EVERY_N(INFO, 100)
+        LOG_EVERY_N(INFO, 1000)
             << "[F" << i << "] res=" << static_cast<int>(face_info.res.u())
             << "x" << static_cast<int>(face_info.res.v())
             << ", logres=" << static_cast<int>(face_info.res.ulog2) << "x"
             << static_cast<int>(face_info.res.vlog2) << boolalpha
             << ", edits=" << face_info.hasEdits()
             << ", subface=" << face_info.isSubface();
+
+        if (face_info.hasEdits()) {
+            throw runtime_error("edited faces are not supported");
+        }
 
         if (face_info.res.ulog2 < 0 or face_info.res.vlog2 < 0) {
             throw runtime_error("unsupported face resolution");
