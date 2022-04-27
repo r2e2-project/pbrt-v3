@@ -1,13 +1,18 @@
 #include "expanded.h"
 
+// clang-format off
 #include <iostream>
+#include <PtexReader.h>
+// clang-format on
+
+#include "messages/lite.h"
 
 using namespace std;
 using namespace pbrt;
 
-ostream &operator<<(ostream &os, const ptex::util::FaceEncoding &fe) {
-    using namespace ptex::util;
+using FaceEncoding = ptex::util::FaceEncoding;
 
+ostream &operator<<(ostream &os, const FaceEncoding &fe) {
     switch (fe) {
         // clang-format off
     case FaceEncoding::ConstDataPtr: os << "ConstDataPtr"; break;
@@ -23,8 +28,7 @@ ostream &operator<<(ostream &os, const ptex::util::FaceEncoding &fe) {
     return os;
 }
 
-ptex::util::FaceEncoding ptex::util::get_face_encoding(
-    const PtexFaceData *face_data) {
+FaceEncoding ptex::util::get_face_encoding(const PtexFaceData *face_data) {
     if (not face_data) {
         throw runtime_error("face_data == nullptr");
     }
@@ -51,18 +55,19 @@ ptex::util::FaceEncoding ptex::util::get_face_encoding(
     throw runtime_error("unknown face encoding");
 }
 
-pair<void *, int> ptex::util::get_data(PtexFaceData *raw_data,
-                                       const int psize) {
+tuple<FaceEncoding, void *, int> ptex::util::get_data(PtexFaceData *raw_data,
+                                                      const int psize) {
     const auto encoding = get_face_encoding(raw_data);
 
     switch (encoding) {
     case FaceEncoding::ConstDataPtr: {
         auto data = dynamic_cast<Ptex::PtexReader::ConstDataPtr *>(raw_data);
-        return {data->getData(), psize};
+        return {encoding, data->getData(), psize};
     }
     case FaceEncoding::Packed: {
         auto data = dynamic_cast<Ptex::PtexReader::PackedFace *>(raw_data);
-        return {data->getData(), psize * data->res().u() * data->res().v()};
+        return {encoding, data->getData(),
+                psize * data->res().u() * data->res().v()};
     }
     case FaceEncoding::Tiled:
     case FaceEncoding::TiledReduced: {
@@ -71,4 +76,45 @@ pair<void *, int> ptex::util::get_data(PtexFaceData *raw_data,
     }
 
     throw runtime_error("unknown face encoding");
+}
+
+ExpandedPtex::ExpandedPtex(const string &path, const char *data,
+                           const size_t data_len)
+    : _path(path) {
+    LiteRecordReader reader{data, data_len};
+    reader.read(&_info);
+
+    _faceinfo.resize(_info.numFaces);
+    reader.read(reinterpret_cast<char *>(_faceinfo.data()),
+                _info.numFaces * sizeof(_faceinfo[0]));
+
+    for (int i = 0; i < _info.numFaces; i++) {
+        auto &fi = _faceinfo[i];
+
+        Ptex::Res max_res;
+        FaceEncoding face_encoding;
+
+        do {
+            reader.read(&max_res);
+            reader.read(&face_encoding);
+
+            switch (face_encoding) {
+            case FaceEncoding::ConstDataPtr:
+            case FaceEncoding::Constant:
+            case FaceEncoding::Packed:
+            case FaceEncoding::Tiled:
+            case FaceEncoding::TiledReduced: {
+                int ntilesu, ntilesv;
+                reader.read(&ntilesu);
+                reader.read(&ntilesv);
+                // we need to read the tiles...
+            }
+
+            case FaceEncoding::Error:
+            default:
+                throw runtime_error("unkown face encoding");
+            }
+
+        } while (max_res.ulog2 > 0 or max_res.vlog2 > 0);
+    }
 }
