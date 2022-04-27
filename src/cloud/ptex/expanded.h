@@ -118,21 +118,20 @@ class ExpandedPtex : public PtexTexture {
 
     virtual void release() { delete this; }
     virtual const char* path() { return _path.c_str(); }
-    virtual Info getInfo() { return _info; }
+    virtual Info getInfo() { return _i; }
 
-    virtual Ptex::MeshType meshType() = 0;
-    virtual Ptex::DataType dataType() = 0;
-    virtual Ptex::BorderMode uBorderMode() = 0;
-    virtual Ptex::BorderMode vBorderMode() = 0;
-    virtual Ptex::EdgeFilterMode edgeFilterMode() = 0;
+    virtual Ptex::MeshType meshType() { return _i.meshType; }
+    virtual Ptex::DataType dataType() { return _i.dataType; }
+    virtual Ptex::BorderMode uBorderMode() { return _i.uBorderMode; }
+    virtual Ptex::BorderMode vBorderMode() { return _i.vBorderMode; }
+    virtual Ptex::EdgeFilterMode edgeFilterMode() { return _i.edgeFilterMode; }
+    virtual int alphaChannel() { return _i.alphaChannel; }
+    virtual int numChannels() { return _i.numChannels; }
+    virtual int numFaces() { return _i.numFaces; }
+    virtual bool hasEdits() { return false; }
+    virtual bool hasMipMaps() { return false; }
 
-    virtual int alphaChannel() = 0;
-    virtual int numChannels() = 0;
-    virtual int numFaces() = 0;
-    virtual bool hasEdits() = 0;
-    virtual bool hasMipMaps() = 0;
-
-    virtual PtexMetaData* getMetaData() = 0;
+    virtual PtexMetaData* getMetaData() { return nullptr; };
 
     virtual const Ptex::FaceInfo& getFaceInfo(int faceid) = 0;
 
@@ -151,9 +150,9 @@ class ExpandedPtex : public PtexTexture {
   private:
     std::string _path;
 
-    Info _info;
+    Info _i;
     std::vector<Ptex::FaceInfo> _faceinfo;
-    std::vector<std::map<Ptex::Res, PtexPtr<PtexFaceData>>> _faces;
+    std::vector<std::vector<PtexPtr<PtexFaceData>>> _faces;
 };
 
 }  // namespace pbrt

@@ -82,13 +82,13 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *data,
                            const size_t data_len)
     : _path(path) {
     LiteRecordReader reader{data, data_len};
-    reader.read(&_info);
+    reader.read(&_i);
 
-    _faceinfo.resize(_info.numFaces);
+    _faceinfo.resize(_i.numFaces);
     reader.read(reinterpret_cast<char *>(_faceinfo.data()),
-                _info.numFaces * sizeof(_faceinfo[0]));
+                _i.numFaces * sizeof(_faceinfo[0]));
 
-    for (int i = 0; i < _info.numFaces; i++) {
+    for (int i = 0; i < _i.numFaces; i++) {
         auto &fi = _faceinfo[i];
 
         Ptex::Res max_res;
