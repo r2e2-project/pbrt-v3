@@ -22,15 +22,27 @@ enum class FaceEncoding : int8_t {
     Error,
 };
 
+struct FaceData {
+    FaceEncoding encoding;
+    const void* data_ptr;
+    int data_len;
+    Ptex::Res res;
+
+    FaceData(const FaceEncoding encoding, const void* data_ptr,
+             const int data_len, const Ptex::Res& res)
+        : encoding(encoding),
+          data_ptr(data_ptr),
+          data_len(data_len),
+          res(res) {}
+};
+
 FaceEncoding get_face_encoding(const PtexFaceData* face_data);
 
-std::tuple<FaceEncoding, void*, int> get_data(PtexFaceData* raw_data,
-                                              const int psize);
+FaceData get_data(PtexFaceData* raw_data, const int psize);
 
 template <class T>
-std::vector<std::tuple<FaceEncoding, void*, int>> get_tiled_data(
-    PtexFaceData* raw_data, const int psize) {
-    std::vector<std::tuple<FaceEncoding, void*, int>> result;
+std::vector<FaceData> get_tiled_data(PtexFaceData* raw_data, const int psize) {
+    std::vector<FaceData> result;
 
     auto data = dynamic_cast<T*>(raw_data);
     if (!data) {
@@ -52,6 +64,10 @@ class ExpandedPtex : public PtexTexture {
     virtual ~ExpandedPtex() {}
 
   private:
+    struct FaceDeleter {
+        void operator()(PtexFaceData* b) { b->release(); }
+    };
+
     class PackedFace : public PtexFaceData {
       private:
         const Ptex::Res _res;
@@ -64,7 +80,7 @@ class ExpandedPtex : public PtexTexture {
               _psize(psize),
               _data(std::make_unique<char[]>(_res.u() * _res.v() * _psize)) {}
 
-        virtual void release() {}
+        virtual void release() { delete this; }
         virtual bool isConstant() { return false; }
         virtual Ptex::Res res() { return _res; }
         virtual bool isTiled() { return false; }
@@ -88,7 +104,7 @@ class ExpandedPtex : public PtexTexture {
         const Ptex::Res _res;
         const Ptex::Res _tileres;
         const int _psize;
-        std::vector<PtexPtr<PtexFaceData>> _tiles;
+        std::vector<std::unique_ptr<PtexFaceData, FaceDeleter>> _tiles;
 
       public:
         TiledFace(Ptex::Res res, Ptex::Res tileres, int psize)
@@ -97,16 +113,13 @@ class ExpandedPtex : public PtexTexture {
               _psize(psize),
               _tiles(_tileres.u() * _tileres.v()) {}
 
-        virtual void release() {}
+        virtual void release() { delete this; }
         virtual bool isConstant() { return false; }
         virtual Ptex::Res res() { return _res; }
         virtual bool isTiled() { return true; }
         virtual Ptex::Res tileRes() { return _tileres; }
         virtual PtexFaceData* getTile(int t) { return _tiles.at(t).get(); }
-
-        void setTile(PtexPtr<PtexFaceData>& tile, int t) {
-            _tiles[t].swap(tile);
-        }
+        void setTile(PtexFaceData* tile, int t) { _tiles[t].reset(tile); }
 
         virtual void* getData() { return nullptr; }
         virtual void getPixel(int u, int v, void* result);
@@ -133,7 +146,7 @@ class ExpandedPtex : public PtexTexture {
 
     virtual PtexMetaData* getMetaData() { return nullptr; };
 
-    virtual const Ptex::FaceInfo& getFaceInfo(int faceid) = 0;
+    virtual const Ptex::FaceInfo& getFaceInfo(int i) { return _faceinfo[i]; }
 
     virtual void getData(int faceid, void* buffer, int stride) = 0;
     virtual void getData(int faceid, void* buffer, int stride,
@@ -150,9 +163,11 @@ class ExpandedPtex : public PtexTexture {
   private:
     std::string _path;
 
-    Info _i;
-    std::vector<Ptex::FaceInfo> _faceinfo;
-    std::vector<std::vector<PtexPtr<PtexFaceData>>> _faces;
+    Info _i{};
+    int _psize{};
+    std::vector<Ptex::FaceInfo> _faceinfo{};
+    std::vector<std::vector<std::unique_ptr<PtexFaceData, FaceDeleter>>>
+        _faces{};
 };
 
 }  // namespace pbrt
