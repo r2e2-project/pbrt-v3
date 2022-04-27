@@ -118,3 +118,11 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *data,
         } while (max_res.ulog2 > 0 or max_res.vlog2 > 0);
     }
 }
+
+void ExpandedPtex::TiledFace::getPixel(int u, int v, void *result) {
+    const int tileu = u >> _tileres.ulog2;
+    const int tilev = v >> _tileres.vlog2;
+    PtexFaceData *tile = getTile(tilev * _tileres.u() + tileu);
+    tile->getPixel(u - (tileu << _tileres.ulog2), v - (tilev << _tileres.vlog2),
+                   result);
+}

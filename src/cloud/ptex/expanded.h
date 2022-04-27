@@ -54,8 +54,8 @@ class ExpandedPtex : public PtexTexture {
   private:
     class PackedFace : public PtexFaceData {
       private:
-        Ptex::Res _res;
-        int _psize;
+        const Ptex::Res _res;
+        const int _psize;
         std::unique_ptr<char[]> _data;
 
       public:
@@ -85,14 +85,16 @@ class ExpandedPtex : public PtexTexture {
 
     class TiledFace : public PtexFaceData {
       private:
-        Ptex::Res _res;
-        Ptex::Res _tileres;
+        const Ptex::Res _res;
+        const Ptex::Res _tileres;
+        const int _psize;
         std::vector<PtexPtr<PtexFaceData>> _tiles;
 
       public:
-        TiledFace(Ptex::Res res, Ptex::Res tileres)
+        TiledFace(Ptex::Res res, Ptex::Res tileres, int psize)
             : _res(res),
               _tileres(tileres),
+              _psize(psize),
               _tiles(_tileres.u() * _tileres.v()) {}
 
         virtual void release() {}
