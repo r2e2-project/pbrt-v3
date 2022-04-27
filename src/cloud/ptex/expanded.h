@@ -9,6 +9,11 @@
 #include <utility>
 #include <vector>
 
+// clang-format off
+#include <iostream>
+#include <PtexReader.h>
+// clang-format on
+
 namespace pbrt {
 
 namespace ptex::util {
@@ -128,6 +133,8 @@ class ExpandedPtex : public PtexTexture {
   public:
     ExpandedPtex(const std::string& path, const char* data,
                  const size_t data_len);
+
+    static void dump(const std::string& output, Ptex::PtexReader& ptex);
 
     virtual void release() { delete this; }
     virtual const char* path() { return _path.c_str(); }

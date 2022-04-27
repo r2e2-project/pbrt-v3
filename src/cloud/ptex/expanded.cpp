@@ -2,11 +2,6 @@
 
 #include <glog/logging.h>
 
-// clang-format off
-#include <iostream>
-#include <PtexReader.h>
-// clang-format on
-
 #include "messages/lite.h"
 
 using namespace std;
@@ -183,4 +178,94 @@ void ExpandedPtex::TiledFace::getPixel(int u, int v, void *result) {
     PtexFaceData *tile = getTile(tilev * _tileres.u() + tileu);
     tile->getPixel(u - (tileu << _tileres.ulog2), v - (tilev << _tileres.vlog2),
                    result);
+}
+
+void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
+    CHECK_NE(ptex.header().meshtype, Ptex::mt_triangle);
+    auto writer = make_unique<LiteRecordWriter>(output);
+
+    const auto num_faces = ptex.numFaces();
+
+    PtexTexture::Info info = ptex.getInfo();
+    writer->write(info);
+    writer->write<int>(ptex.header().pixelSize());
+
+    vector<Ptex::FaceInfo> all_faces;
+    for (int i = 0; i < num_faces; i++) {
+        all_faces.push_back(ptex.getFaceInfo(i));
+    }
+
+    writer->write(reinterpret_cast<const char *>(all_faces.data()),
+                  all_faces.size() * sizeof(all_faces[0]));
+
+    for (size_t i = 0; i < all_faces.size(); i++) {
+        auto &face_info = all_faces[i];
+
+        if (face_info.hasEdits()) {
+            throw runtime_error("edited faces are not supported");
+        }
+
+        if (face_info.res.ulog2 < 0 or face_info.res.vlog2 < 0) {
+            throw runtime_error("unsupported face resolution");
+        }
+
+        bool highest_res_processed = false;
+
+        for (int8_t res_u = face_info.res.ulog2; res_u >= 0; res_u--) {
+            for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
+                Ptex::Res new_res{res_u, res_v};
+                PtexFaceData *raw_data = ptex.getData(i, new_res);
+                const auto encoding = ptex::util::get_face_encoding(raw_data);
+
+                if (not highest_res_processed) {
+                    CHECK_EQ((encoding == FaceEncoding::Constant ||
+                              encoding == FaceEncoding::ConstDataPtr) &&
+                                 (res_u != 0 or res_v != 0),
+                             false);
+                    highest_res_processed = true;
+                }
+
+                if (raw_data->res() != new_res) {
+                    throw runtime_error("resolution mismatch");
+                }
+
+                if (encoding == FaceEncoding::Tiled ||
+                    encoding == FaceEncoding::TiledReduced) {
+                    auto tiles_data =
+                        (encoding == FaceEncoding::Tiled)
+                            ? ptex::util::get_tiled_data<
+                                  Ptex::PtexReader::TiledFace>(raw_data,
+                                                               ptex.pixelsize())
+                            : ptex::util::get_tiled_data<
+                                  Ptex::PtexReader::TiledReducedFace>(
+                                  raw_data, ptex.pixelsize());
+
+                    auto base_data =
+                        dynamic_cast<Ptex::PtexReader::TiledFaceBase *>(
+                            raw_data);
+
+                    writer->write(encoding);
+                    writer->write(raw_data->res());
+                    writer->write(base_data->tileRes());
+
+                    for (auto &data : tiles_data) {
+                        writer->write(data.encoding);
+                        writer->write(data.res);
+                        writer->write(
+                            reinterpret_cast<const char *>(data.data_ptr),
+                            data.data_len);
+                    }
+                } else {
+                    auto data =
+                        ptex::util::get_data(raw_data, ptex.pixelsize());
+                    writer->write(data.encoding);
+                    writer->write(data.res);
+                    writer->write(reinterpret_cast<const char *>(data.data_ptr),
+                                  data.data_len);
+                }
+            }
+        }
+    }
+
+    writer = nullptr;
 }
