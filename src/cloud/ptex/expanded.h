@@ -16,54 +16,6 @@
 
 namespace pbrt {
 
-namespace ptex::util {
-
-enum class FaceEncoding : int8_t {
-    ConstDataPtr,
-    Constant,
-    Tiled,
-    Packed,
-    TiledReduced,
-    Error,
-};
-
-struct FaceData {
-    FaceEncoding encoding;
-    const void* data_ptr;
-    int data_len;
-    Ptex::Res res;
-
-    FaceData(const FaceEncoding encoding, const void* data_ptr,
-             const int data_len, const Ptex::Res& res)
-        : encoding(encoding),
-          data_ptr(data_ptr),
-          data_len(data_len),
-          res(res) {}
-};
-
-FaceEncoding get_face_encoding(const PtexFaceData* face_data);
-
-FaceData get_data(PtexFaceData* raw_data, const int psize);
-
-template <class T>
-std::vector<FaceData> get_tiled_data(PtexFaceData* raw_data, const int psize) {
-    std::vector<FaceData> result;
-
-    auto data = dynamic_cast<T*>(raw_data);
-    if (!data) {
-        throw std::runtime_error("wrong face type passed to get_tiled_data");
-    }
-
-    for (auto i = 0; i < data->ntiles(); i++) {
-        auto tile_raw_data = data->getTile(i);
-        result.push_back(get_data(tile_raw_data, psize));
-    }
-
-    return result;
-}
-
-}  // namespace ptex::util
-
 class ExpandedPtex : public PtexTexture {
   protected:
     virtual ~ExpandedPtex() {}

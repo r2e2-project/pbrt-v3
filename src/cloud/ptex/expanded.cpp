@@ -7,25 +7,30 @@
 using namespace std;
 using namespace pbrt;
 
-using FaceEncoding = ptex::util::FaceEncoding;
+enum class FaceEncoding : int8_t {
+    ConstDataPtr,
+    Constant,
+    Tiled,
+    Packed,
+    TiledReduced,
+    Error,
+};
 
-ostream &operator<<(ostream &os, const FaceEncoding &fe) {
-    switch (fe) {
-        // clang-format off
-    case FaceEncoding::ConstDataPtr: os << "ConstDataPtr"; break;
-    case FaceEncoding::Constant:     os << "Constant"; break;
-    case FaceEncoding::Tiled:        os << "Tiled"; break;
-    case FaceEncoding::Packed:       os << "Packed"; break;
-    case FaceEncoding::Error:        os << "Error"; break;
-    case FaceEncoding::TiledReduced: os << "TiledReducedFace"; break;
-    default:                         os << "Unknown";
-        // clang-format on
-    }
+struct FaceData {
+    FaceEncoding encoding;
+    const void *data_ptr;
+    int data_len;
+    Ptex::Res res;
 
-    return os;
-}
+    FaceData(const FaceEncoding encoding, const void *data_ptr,
+             const int data_len, const Ptex::Res &res)
+        : encoding(encoding),
+          data_ptr(data_ptr),
+          data_len(data_len),
+          res(res) {}
+};
 
-FaceEncoding ptex::util::get_face_encoding(const PtexFaceData *face_data) {
+FaceEncoding get_face_encoding(const PtexFaceData *face_data) {
     if (not face_data) {
         throw runtime_error("face_data == nullptr");
     }
@@ -52,8 +57,7 @@ FaceEncoding ptex::util::get_face_encoding(const PtexFaceData *face_data) {
     throw runtime_error("unknown face encoding");
 }
 
-ptex::util::FaceData ptex::util::get_data(PtexFaceData *raw_data,
-                                          const int psize) {
+FaceData get_data(PtexFaceData *raw_data, const int psize) {
     const auto encoding = get_face_encoding(raw_data);
 
     switch (encoding) {
@@ -73,6 +77,39 @@ ptex::util::FaceData ptex::util::get_data(PtexFaceData *raw_data,
     }
 
     throw runtime_error("unknown face encoding");
+}
+
+template <class T>
+std::vector<FaceData> get_tiled_data(PtexFaceData *raw_data, const int psize) {
+    std::vector<FaceData> result;
+
+    auto data = dynamic_cast<T *>(raw_data);
+    if (!data) {
+        throw std::runtime_error("wrong face type passed to get_tiled_data");
+    }
+
+    for (auto i = 0; i < data->ntiles(); i++) {
+        auto tile_raw_data = data->getTile(i);
+        result.push_back(get_data(tile_raw_data, psize));
+    }
+
+    return result;
+}
+
+ostream &operator<<(ostream &os, const FaceEncoding &fe) {
+    switch (fe) {
+        // clang-format off
+    case FaceEncoding::ConstDataPtr: os << "ConstDataPtr"; break;
+    case FaceEncoding::Constant:     os << "Constant"; break;
+    case FaceEncoding::Tiled:        os << "Tiled"; break;
+    case FaceEncoding::Packed:       os << "Packed"; break;
+    case FaceEncoding::Error:        os << "Error"; break;
+    case FaceEncoding::TiledReduced: os << "TiledReducedFace"; break;
+    default:                         os << "Unknown";
+        // clang-format on
+    }
+
+    return os;
 }
 
 ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
@@ -215,7 +252,7 @@ void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
             for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
                 Ptex::Res new_res{res_u, res_v};
                 PtexFaceData *raw_data = ptex.getData(i, new_res);
-                const auto encoding = ptex::util::get_face_encoding(raw_data);
+                const auto encoding = get_face_encoding(raw_data);
 
                 if (not highest_res_processed) {
                     CHECK_EQ((encoding == FaceEncoding::Constant ||
@@ -233,10 +270,9 @@ void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
                     encoding == FaceEncoding::TiledReduced) {
                     auto tiles_data =
                         (encoding == FaceEncoding::Tiled)
-                            ? ptex::util::get_tiled_data<
-                                  Ptex::PtexReader::TiledFace>(raw_data,
-                                                               ptex.pixelsize())
-                            : ptex::util::get_tiled_data<
+                            ? get_tiled_data<Ptex::PtexReader::TiledFace>(
+                                  raw_data, ptex.pixelsize())
+                            : get_tiled_data<
                                   Ptex::PtexReader::TiledReducedFace>(
                                   raw_data, ptex.pixelsize());
 
@@ -256,8 +292,7 @@ void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
                             data.data_len);
                     }
                 } else {
-                    auto data =
-                        ptex::util::get_data(raw_data, ptex.pixelsize());
+                    auto data = get_data(raw_data, ptex.pixelsize());
                     writer->write(data.encoding);
                     writer->write(data.res);
                     writer->write(reinterpret_cast<const char *>(data.data_ptr),

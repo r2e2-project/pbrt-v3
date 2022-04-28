@@ -14,7 +14,6 @@
 
 using namespace std;
 using namespace pbrt;
-using namespace pbrt::ptex::util;
 
 void usage(const char *argv0) {
     cerr << "Usage: " << argv0 << " INPUT OUTPUT" << endl;
