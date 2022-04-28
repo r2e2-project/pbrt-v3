@@ -107,17 +107,16 @@ class ExpandedPtex : public PtexTexture {
 
     virtual const Ptex::FaceInfo& getFaceInfo(int i) { return _faceinfo[i]; }
 
-    virtual void getData(int faceid, void* buffer, int stride) = 0;
-    virtual void getData(int faceid, void* buffer, int stride,
-                         Ptex::Res res) = 0;
+    virtual void getData(int faceid, void* buffer, int stride);
+    virtual void getData(int faceid, void* buffer, int stride, Ptex::Res res);
 
-    virtual PtexFaceData* getData(int faceid) = 0;
-    virtual PtexFaceData* getData(int faceid, Ptex::Res res) = 0;
+    virtual PtexFaceData* getData(int faceid);
+    virtual PtexFaceData* getData(int faceid, Ptex::Res res);
 
     virtual void getPixel(int faceid, int u, int v, float* result,
-                          int firstchan, int nchannels) = 0;
+                          int firstchan, int nchannels);
     virtual void getPixel(int faceid, int u, int v, float* result,
-                          int firstchan, int nchannels, Ptex::Res res) = 0;
+                          int firstchan, int nchannels, Ptex::Res res);
 
   private:
     std::string _path;
@@ -127,6 +126,8 @@ class ExpandedPtex : public PtexTexture {
     std::vector<Ptex::FaceInfo> _faceinfo{};
     std::vector<std::vector<std::unique_ptr<PtexFaceData, FaceDeleter>>>
         _faces{};
+
+    std::vector<char> _error_pixel{};
 };
 
 }  // namespace pbrt

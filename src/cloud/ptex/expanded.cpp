@@ -6,6 +6,7 @@
 
 using namespace std;
 using namespace pbrt;
+using namespace Ptex;
 
 enum class FaceEncoding : int8_t {
     ConstDataPtr,
@@ -20,10 +21,10 @@ struct FaceData {
     FaceEncoding encoding;
     const void *data_ptr;
     int data_len;
-    Ptex::Res res;
+    Res res;
 
     FaceData(const FaceEncoding encoding, const void *data_ptr,
-             const int data_len, const Ptex::Res &res)
+             const int data_len, const Res &res)
         : encoding(encoding),
           data_ptr(data_ptr),
           data_len(data_len),
@@ -35,22 +36,22 @@ FaceEncoding get_face_encoding(const PtexFaceData *face_data) {
         throw runtime_error("face_data == nullptr");
     }
 
-    if (dynamic_cast<const Ptex::PtexReader::ConstDataPtr *>(face_data)) {
+    if (dynamic_cast<const PtexReader::ConstDataPtr *>(face_data)) {
         return FaceEncoding::ConstDataPtr;
     }
-    if (dynamic_cast<const Ptex::PtexReader::ConstantFace *>(face_data)) {
+    if (dynamic_cast<const PtexReader::ConstantFace *>(face_data)) {
         return FaceEncoding::Constant;
     }
-    if (dynamic_cast<const Ptex::PtexReader::TiledFace *>(face_data)) {
+    if (dynamic_cast<const PtexReader::TiledFace *>(face_data)) {
         return FaceEncoding::Tiled;
     }
-    if (dynamic_cast<const Ptex::PtexReader::TiledReducedFace *>(face_data)) {
+    if (dynamic_cast<const PtexReader::TiledReducedFace *>(face_data)) {
         return FaceEncoding::TiledReduced;
     }
-    if (dynamic_cast<const Ptex::PtexReader::PackedFace *>(face_data)) {
+    if (dynamic_cast<const PtexReader::PackedFace *>(face_data)) {
         return FaceEncoding::Packed;
     }
-    if (dynamic_cast<const Ptex::PtexReader::ErrorFace *>(face_data)) {
+    if (dynamic_cast<const PtexReader::ErrorFace *>(face_data)) {
         throw runtime_error("encountered error face");
     }
 
@@ -62,11 +63,11 @@ FaceData get_data(PtexFaceData *raw_data, const int psize) {
 
     switch (encoding) {
     case FaceEncoding::ConstDataPtr: {
-        auto data = dynamic_cast<Ptex::PtexReader::ConstDataPtr *>(raw_data);
+        auto data = dynamic_cast<PtexReader::ConstDataPtr *>(raw_data);
         return {encoding, data->getData(), psize, raw_data->res()};
     }
     case FaceEncoding::Packed: {
-        auto data = dynamic_cast<Ptex::PtexReader::PackedFace *>(raw_data);
+        auto data = dynamic_cast<PtexReader::PackedFace *>(raw_data);
         return {encoding, data->getData(),
                 psize * data->res().u() * data->res().v(), raw_data->res()};
     }
@@ -119,11 +120,13 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
     reader.read(&_i);
     reader.read(&_psize);
 
+    _error_pixel.resize(_psize);
     _faceinfo.resize(_i.numFaces);
+
     reader.read(reinterpret_cast<char *>(_faceinfo.data()),
                 _i.numFaces * sizeof(_faceinfo[0]));
 
-    auto make_face = [this](const FaceEncoding encoding, Ptex::Res face_res,
+    auto make_face = [this](const FaceEncoding encoding, Res face_res,
                             auto &reader) {
         PtexFaceData *face;
         uint32_t face_data_len;
@@ -160,7 +163,7 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
         for (int8_t res_u = face_info.res.ulog2; res_u >= 0; res_u--) {
             for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
                 FaceEncoding face_encoding;
-                Ptex::Res face_res;
+                Res face_res;
                 reader.read(&face_encoding);
                 reader.read(&face_res);
 
@@ -179,7 +182,7 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
 
                 case FaceEncoding::Tiled:
                 case FaceEncoding::TiledReduced: {
-                    Ptex::Res tile_res;
+                    Res tile_res;
                     reader.read(&tile_res);
 
                     const int ntiles_u = face_res.ntilesu(tile_res);
@@ -191,7 +194,7 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
 
                     for (int i = 0; i < ntiles; i++) {
                         FaceEncoding tface_enc;
-                        Ptex::Res tface_res;
+                        Res tface_res;
                         reader.read(&tface_enc);
                         reader.read(&tface_res);
 
@@ -217,8 +220,8 @@ void ExpandedPtex::TiledFace::getPixel(int u, int v, void *result) {
                    result);
 }
 
-void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
-    CHECK_NE(ptex.header().meshtype, Ptex::mt_triangle);
+void ExpandedPtex::dump(const std::string &output, PtexReader &ptex) {
+    CHECK_NE(ptex.header().meshtype, mt_triangle);
     auto writer = make_unique<LiteRecordWriter>(output);
 
     const auto num_faces = ptex.numFaces();
@@ -227,7 +230,7 @@ void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
     writer->write(info);
     writer->write<int>(ptex.header().pixelSize());
 
-    vector<Ptex::FaceInfo> all_faces;
+    vector<FaceInfo> all_faces;
     for (int i = 0; i < num_faces; i++) {
         all_faces.push_back(ptex.getFaceInfo(i));
     }
@@ -250,7 +253,7 @@ void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
 
         for (int8_t res_u = face_info.res.ulog2; res_u >= 0; res_u--) {
             for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
-                Ptex::Res new_res{res_u, res_v};
+                Res new_res{res_u, res_v};
                 PtexFaceData *raw_data = ptex.getData(i, new_res);
                 const auto encoding = get_face_encoding(raw_data);
 
@@ -270,15 +273,13 @@ void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
                     encoding == FaceEncoding::TiledReduced) {
                     auto tiles_data =
                         (encoding == FaceEncoding::Tiled)
-                            ? get_tiled_data<Ptex::PtexReader::TiledFace>(
+                            ? get_tiled_data<PtexReader::TiledFace>(
                                   raw_data, ptex.pixelsize())
-                            : get_tiled_data<
-                                  Ptex::PtexReader::TiledReducedFace>(
+                            : get_tiled_data<PtexReader::TiledReducedFace>(
                                   raw_data, ptex.pixelsize());
 
                     auto base_data =
-                        dynamic_cast<Ptex::PtexReader::TiledFaceBase *>(
-                            raw_data);
+                        dynamic_cast<PtexReader::TiledFaceBase *>(raw_data);
 
                     writer->write(encoding);
                     writer->write(raw_data->res());
@@ -303,4 +304,131 @@ void ExpandedPtex::dump(const std::string &output, Ptex::PtexReader &ptex) {
     }
 
     writer = nullptr;
+}
+
+void ExpandedPtex::getData(int faceid, void *buffer, int stride) {
+    const auto &fi = getFaceInfo(faceid);
+    getData(faceid, buffer, stride, fi.res);
+}
+
+void ExpandedPtex::getData(int faceid, void *buffer, int stride, Res res) {
+    if (faceid < 0 || faceid > _i.numFaces) {
+        PtexUtils::fill(&_error_pixel[0], buffer, stride, res.u(), res.v(),
+                        _psize);
+        return;
+    }
+
+    const int resu = res.u();
+    const int resv = res.v();
+    const int rowlen = _psize * resu;
+    if (stride == 0) stride = rowlen;
+
+    auto face = getData(faceid, res);
+
+    if (face->isConstant()) {
+        PtexUtils::fill(face->getData(), buffer, stride, resu, resv, _psize);
+    } else if (face->isTiled()) {
+        const Res tileres = face->tileRes();
+        const int ntilesu = res.ntilesu(tileres);
+        const int ntilesv = res.ntilesv(tileres);
+        const int tileures = tileres.u();
+        const int tilevres = tileres.v();
+        const int tilerowlen = _psize * tileures;
+
+        int tile = 0;
+        char *dsttilerow = reinterpret_cast<char *>(buffer);
+        for (int i = 0; i < ntilesv; i++) {
+            char *dsttile = dsttilerow;
+            for (int j = 0; j < ntilesu; j++) {
+                auto t = face->getTile(tile++);
+                if (t->isConstant()) {
+                    PtexUtils::fill(t->getData(), dsttile, stride, tileures,
+                                    tilevres, _psize);
+                } else {
+                    PtexUtils::copy(t->getData(), tilerowlen, dsttile, stride,
+                                    tilevres, tilerowlen);
+                }
+
+                dsttile += tilerowlen;
+            }
+            dsttilerow += stride * tilevres;
+        }
+    } else {
+        PtexUtils::copy(face->getData(), rowlen, buffer, stride, resv, rowlen);
+    }
+}
+
+PtexFaceData *ExpandedPtex::getData(int faceid) {
+    if (faceid <= 0 || faceid >= _i.numFaces) {
+        return new PtexReader::ErrorFace(&_error_pixel[0], _psize, true);
+    }
+
+    return _faces[faceid].front().get();
+}
+
+PtexFaceData *ExpandedPtex::getData(int faceid, Res res) {
+    const auto &fi = _faceinfo[faceid];
+    const auto redu = fi.res.ulog2 - res.ulog2;
+    const auto redv = fi.res.vlog2 - res.vlog2;
+
+    if (res.ulog2 < 0 || res.vlog2 < 0) {
+        throw runtime_error("reductions below 1 pixel not supported");
+    } else if (redu < 0 || redv < 0) {
+        throw runtime_error("enlargements are not supported");
+    } else if (_i.meshType == Ptex::MeshType::mt_triangle) {
+        if (redu != redv) {
+            throw runtime_error(
+                "anisotropic reductions are not supported for triangle mesh");
+        }
+    }
+
+    // let's compute the index for this reduction
+    const auto idx = (fi.res.ulog2 - res.ulog2) * (fi.res.vlog2 + 1) +
+                     fi.res.vlog2 - res.vlog2;
+
+    return _faces[faceid].at(idx).get();
+}
+
+void ExpandedPtex::getPixel(int faceid, int u, int v, float *result,
+                            int firstchan, int nchannels) {
+    memset(result, 0, nchannels);
+    nchannels = PtexUtils::min(nchannels, _i.numChannels - firstchan);
+    if (nchannels <= 0) return;
+
+    auto data = getData(faceid);
+    void *pixel = alloca(_psize);
+    data->getPixel(u, v, pixel);
+
+    const int datasize = DataSize(_i.dataType);
+    if (firstchan) {
+        pixel = reinterpret_cast<char *>(pixel) + datasize * firstchan;
+    }
+
+    if (_i.dataType == dt_float) {
+        memcpy(result, pixel, datasize * nchannels);
+    } else {
+        ConvertToFloat(result, pixel, _i.dataType, nchannels);
+    }
+}
+
+void ExpandedPtex::getPixel(int faceid, int u, int v, float *result,
+                            int firstchan, int nchannels, Res res) {
+    memset(result, 0, nchannels);
+    nchannels = PtexUtils::min(nchannels, _i.numChannels - firstchan);
+    if (nchannels <= 0) return;
+
+    auto data = getData(faceid, res);
+    void *pixel = alloca(_psize);
+    data->getPixel(u, v, pixel);
+
+    const int datasize = DataSize(_i.dataType);
+    if (firstchan) {
+        pixel = reinterpret_cast<char *>(pixel) + datasize * firstchan;
+    }
+
+    if (_i.dataType == dt_float) {
+        memcpy(result, pixel, datasize * nchannels);
+    } else {
+        ConvertToFloat(result, pixel, _i.dataType, nchannels);
+    }
 }
