@@ -137,6 +137,7 @@ class ExpandedPtex : public Ptex::PtexTexture {
     Info _i{};
     int _psize{};
     std::vector<Ptex::FaceInfo> _faceinfo{};
+    std::vector<uint8_t> _const_data{};
     std::vector<std::vector<std::unique_ptr<PtexFaceData, FaceDeleter>>>
         _faces{};
 

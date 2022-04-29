@@ -119,6 +119,9 @@ ExpandedPtex::ExpandedPtex(RecordReader *reader) {
 
     _error_pixel.resize(_psize);
     _faceinfo.resize(_i.numFaces);
+    _const_data.resize(_i.numFaces * _psize);
+
+    reader->read(reinterpret_cast<char *>(&_const_data[0]), _const_data.size());
 
     reader->read(reinterpret_cast<char *>(_faceinfo.data()),
                  _i.numFaces * sizeof(_faceinfo[0]));
@@ -245,8 +248,11 @@ void ExpandedPtex::dump(const std::string &output, PtexReader &ptex) {
     const auto num_faces = ptex.numFaces();
 
     PtexTexture::Info info = ptex.getInfo();
+
     writer->write(info);
     writer->write<int>(ptex.header().pixelSize());
+    writer->write(reinterpret_cast<const char *>(ptex.getConstData()),
+                  info.numFaces * ptex.header().pixelSize());
 
     vector<FaceInfo> all_faces;
     for (int i = 0; i < num_faces; i++) {
