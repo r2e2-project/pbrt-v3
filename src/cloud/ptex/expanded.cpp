@@ -227,6 +227,17 @@ void ExpandedPtex::TiledFace::getPixel(int u, int v, void *result) {
                    result);
 }
 
+/* FORMAT:
+   - texture_info : PtexTexture::Info
+   - pixel_size : int
+   - const_data : string
+   - all_faces : string
+   > for each face:
+     - face_encoding : FaceEncoding
+     - face_resolution : Ptex::Res
+     - face_data: string
+*/
+
 void ExpandedPtex::dump(const std::string &output, PtexReader &ptex) {
     CHECK_NE(ptex.header().meshtype, mt_triangle);
     auto writer = make_unique<LiteRecordWriter>(output);
