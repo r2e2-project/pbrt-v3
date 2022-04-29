@@ -123,6 +123,7 @@
 #include "accelerators/proxydumpbvh.h"
 #include "cloud/manager.h"
 #include "cloud/pimage.h"
+#include "cloud/ptex/expanded.h"
 #include "lights/pinfinite.h"
 
 #include <map>
@@ -726,6 +727,8 @@ std::shared_ptr<Texture<Float>> MakeFloatTexture(const std::string &name,
         tex = CreateWindyFloatTexture(tex2world, tp);
     else if (name == "ptex")
         tex = CreatePtexFloatTexture(tex2world, tp);
+    else if (name == "expandedptex")
+        tex = CreateExpandedPtexFloatTexture(tex2world, tp);
     else
         Warning("Float texture \"%s\" unknown.", name.c_str());
     tp.ReportUnused();
@@ -767,6 +770,8 @@ std::shared_ptr<Texture<Spectrum>> MakeSpectrumTexture(
         tex = CreateWindySpectrumTexture(tex2world, tp);
     else if (name == "ptex")
         tex = CreatePtexSpectrumTexture(tex2world, tp);
+    else if (name == "expandedptex")
+        tex = CreateExpandedPtexSpectrumTexture(tex2world, tp);
     else
         Warning("Spectrum texture \"%s\" unknown.", name.c_str());
     tp.ReportUnused();
