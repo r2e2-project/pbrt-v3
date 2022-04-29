@@ -198,11 +198,13 @@ ExpandedPtex::ExpandedPtex(RecordReader *reader) {
                         tface->setTile(make_face(tface_enc, tface_res, reader),
                                        i);
                     }
+
+                    break;
                 }
 
                 case FaceEncoding::Error:
                 default:
-                    throw runtime_error("unkown face encoding");
+                    throw runtime_error("unknown face encoding");
                 }
             }
         }
