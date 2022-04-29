@@ -62,7 +62,8 @@ enum class TextureType {
     Scale,
     UV,
     Windy,
-    Wrinkled
+    Wrinkled,
+    ExpandedPtex,
 };
 
 // Texture Declarations

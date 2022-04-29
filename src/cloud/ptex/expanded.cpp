@@ -437,3 +437,69 @@ void ExpandedPtex::getPixel(int faceid, int u, int v, float *result,
         ConvertToFloat(result, pixel, _i.dataType, nchannels);
     }
 }
+
+template <typename T>
+ExpandedPtexTexture<T>::ExpandedPtexTexture(const string &filename, Float gamma)
+    : texture(new ExpandedPtex{filename}), gamma(gamma) {}
+
+template <typename T>
+inline T fromResult(int nc, float *result) {
+    return T::unimplemented;
+}
+
+template <>
+inline Float fromResult<Float>(int nc, float *result) {
+    if (nc == 1)
+        return result[0];
+    else
+        return (result[0] + result[1] + result[2]) / 3;
+}
+
+template <>
+inline Spectrum fromResult<Spectrum>(int nc, float *result) {
+    if (nc == 1)
+        return Spectrum(result[0]);
+    else {
+        Float rgb[3] = {result[0], result[1], result[2]};
+        return Spectrum::FromRGB(rgb);
+    }
+}
+
+template <typename T>
+T ExpandedPtexTexture<T>::Evaluate(const SurfaceInteraction &si) const {
+    Ptex::PtexPtr<Ptex::PtexFilter> filter{Ptex::PtexFilter::getFilter(
+        texture.get(), {Ptex::PtexFilter::FilterType::f_bspline})};
+
+    const int nc = texture->numChannels();
+
+    float result[3];
+    int first_chan = 0;
+    filter->eval(result, first_chan, nc, si.faceIndex, si.uv[0], si.uv[1],
+                 si.dudx, si.dvdx, si.dudy, si.dvdy);
+    filter->release();
+
+    if (gamma != 1) {
+        for (int i = 0; i < nc; ++i) {
+            if (result[i] >= 0 && result[i] <= 1) {
+                // FIXME: should use something more efficient here
+                result[i] = std::pow(result[i], gamma);
+            }
+        }
+    }
+
+    return fromResult<T>(nc, result);
+}
+
+ExpandedPtexTexture<Float> *pbrt::CreateExpandedPtexFloatTexture(
+    const Transform &tex2world, const TextureParams &tp) {
+    std::string filename = tp.FindFilename("filename");
+    Float gamma = tp.FindFloat("gamma", 2.2);
+    return new ExpandedPtexTexture<Float>(filename, gamma);
+}
+
+ExpandedPtexTexture<Spectrum> *pbrt::CreateExpandedPtexSpectrumTexture(
+    const Transform &tex2world, const TextureParams &tp) {
+    std::string filename = tp.FindFilename("filename");
+    Float gamma = tp.FindFloat("gamma", 2.2);
+    return new ExpandedPtexTexture<Spectrum>(filename, gamma);
+}

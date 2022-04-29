@@ -14,6 +14,11 @@
 #include <PtexReader.h>
 // clang-format on
 
+#include "interaction.h"
+#include "paramset.h"
+#include "pbrt.h"
+#include "texture.h"
+
 class RecordReader;
 
 namespace pbrt {
@@ -133,6 +138,31 @@ class ExpandedPtex : public Ptex::PtexTexture {
 
     std::vector<char> _error_pixel{};
 };
+
+// PtexTexture Declarations
+template <typename T>
+class ExpandedPtexTexture : public Texture<T> {
+  public:
+    // PtexTexture Public Methods
+    ExpandedPtexTexture(const std::string& filename, Float gamma);
+    ~ExpandedPtexTexture() {}
+    T Evaluate(const SurfaceInteraction&) const;
+
+    TextureType GetType() const { return TextureType::ExpandedPtex; }
+
+  private:
+    struct TextureDeleter {
+        void operator()(ExpandedPtex* b) { b->release(); }
+    };
+
+    const std::unique_ptr<ExpandedPtex, TextureDeleter> texture;
+    const Float gamma;
+};
+
+ExpandedPtexTexture<Float>* CreateExpandedPtexFloatTexture(
+    const Transform& tex2world, const TextureParams& tp);
+ExpandedPtexTexture<Spectrum>* CreateExpandedPtexSpectrumTexture(
+    const Transform& tex2world, const TextureParams& tp);
 
 }  // namespace pbrt
 
