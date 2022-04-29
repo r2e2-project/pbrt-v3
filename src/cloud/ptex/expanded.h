@@ -33,7 +33,7 @@ class ExpandedPtex : public Ptex::PtexTexture {
     };
 
     class PackedFace : public PtexFaceData {
-      private:
+      protected:
         const Ptex::Res _res;
         const int _psize;
         std::unique_ptr<char[]> _data;
@@ -44,7 +44,7 @@ class ExpandedPtex : public Ptex::PtexTexture {
               _psize(psize),
               _data(std::make_unique<char[]>(_res.u() * _res.v() * _psize)) {}
 
-        virtual void release() {} // memory is managed by ExpandedPtex
+        virtual void release() {}  // memory is managed by ExpandedPtex
         virtual bool isConstant() { return false; }
         virtual Ptex::Res res() { return _res; }
         virtual bool isTiled() { return false; }
@@ -61,6 +61,10 @@ class ExpandedPtex : public Ptex::PtexTexture {
       public:
         ConstantFace(int psize) : PackedFace(0, psize) {}
         virtual bool isConstant() { return true; }
+
+        virtual void getPixel(int, int, void* result) {
+            memcpy(result, _data.get(), _psize);
+        }
     };
 
     class TiledFace : public PtexFaceData {
@@ -77,7 +81,7 @@ class ExpandedPtex : public Ptex::PtexTexture {
               _psize(psize),
               _tiles(_tileres.u() * _tileres.v()) {}
 
-        virtual void release() {} // memory is managed by ExpandedPtex
+        virtual void release() {}  // memory is managed by ExpandedPtex
         virtual bool isConstant() { return false; }
         virtual Ptex::Res res() { return _res; }
         virtual bool isTiled() { return true; }

@@ -51,6 +51,8 @@ int main(int argc, char *argv[]) {
                  << "  - Faces     = " << num_faces << endl
                  << "  - Mesh type = "
                  << Ptex::MeshTypeName(ptex_texture->meshType()) << endl
+                 << "  - Data type = "
+                 << Ptex::DataTypeName(ptex_texture->dataType()) << endl
                  << "  - Mipmaps   = " << ptex_texture->hasMipMaps() << endl
                  << "  - Edits     = " << ptex_texture->hasEdits();
 
