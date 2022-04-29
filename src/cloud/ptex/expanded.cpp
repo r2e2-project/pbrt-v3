@@ -478,7 +478,6 @@ T ExpandedPtexTexture<T>::Evaluate(const SurfaceInteraction &si) const {
     int first_chan = 0;
     filter->eval(result, first_chan, nc, si.faceIndex, si.uv[0], si.uv[1],
                  si.dudx, si.dvdx, si.dudy, si.dvdy);
-    filter->release();
 
     if (gamma != 1) {
         for (int i = 0; i < nc; ++i) {

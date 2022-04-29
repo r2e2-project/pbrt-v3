@@ -44,7 +44,7 @@ class ExpandedPtex : public Ptex::PtexTexture {
               _psize(psize),
               _data(std::make_unique<char[]>(_res.u() * _res.v() * _psize)) {}
 
-        virtual void release() { delete this; }
+        virtual void release() {} // memory is managed by ExpandedPtex
         virtual bool isConstant() { return false; }
         virtual Ptex::Res res() { return _res; }
         virtual bool isTiled() { return false; }
@@ -77,7 +77,7 @@ class ExpandedPtex : public Ptex::PtexTexture {
               _psize(psize),
               _tiles(_tileres.u() * _tileres.v()) {}
 
-        virtual void release() { delete this; }
+        virtual void release() {} // memory is managed by ExpandedPtex
         virtual bool isConstant() { return false; }
         virtual Ptex::Res res() { return _res; }
         virtual bool isTiled() { return true; }
