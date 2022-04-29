@@ -32,6 +32,27 @@ class ExpandedPtex : public Ptex::PtexTexture {
         void operator()(PtexFaceData* b) { b->release(); }
     };
 
+    class ConstPtrFace : public PtexFaceData {
+      protected:
+        void* _data;
+        int _pixelsize;
+
+      public:
+        ConstPtrFace(void* data, int pixelsize)
+            : _data(data), _pixelsize(pixelsize) {}
+
+        virtual void release() {}  // memory is managed by ExpandedPtex
+        virtual Ptex::Res res() { return 0; }
+        virtual bool isConstant() { return true; }
+        virtual void* getData() { return _data; }
+        virtual bool isTiled() { return false; }
+        virtual Ptex::Res tileRes() { return 0; }
+        virtual PtexFaceData* getTile(int) { return 0; }
+        virtual void getPixel(int, int, void* result) {
+            memcpy(result, _data, _pixelsize);
+        }
+    };
+
     class PackedFace : public PtexFaceData {
       protected:
         const Ptex::Res _res;

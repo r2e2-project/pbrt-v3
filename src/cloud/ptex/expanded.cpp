@@ -132,7 +132,13 @@ ExpandedPtex::ExpandedPtex(RecordReader *reader) {
         uint32_t face_data_len;
 
         switch (encoding) {
-        case FaceEncoding::ConstDataPtr:
+        case FaceEncoding::ConstDataPtr: {
+            int offset;
+            reader->read(&offset);
+            face = new ConstPtrFace(&_const_data[0] + offset, _psize);
+            break;
+        }
+
         case FaceEncoding::Constant:
             face = new ConstantFace(_psize);
             face_data_len = _psize;
@@ -289,12 +295,21 @@ void ExpandedPtex::dump(const std::string &output, PtexReader &ptex) {
                     highest_res_processed = true;
                 }
 
-                if (raw_data->res() != new_res) {
-                    throw runtime_error("resolution mismatch");
-                }
+                CHECK(raw_data->res() == new_res) << "resolution mismatch";
 
-                if (encoding == FaceEncoding::Tiled ||
-                    encoding == FaceEncoding::TiledReduced) {
+                if (encoding == FaceEncoding::ConstDataPtr) {
+                    auto data = get_data(raw_data, ptex.pixelsize());
+                    const int const_data_offset =
+                        reinterpret_cast<const char *>(data.data_ptr) -
+                        reinterpret_cast<const char *>(ptex.getConstData());
+
+                    CHECK_GE(const_data_offset, 0) << "negative offset";
+
+                    writer->write(data.encoding);
+                    writer->write(new_res);
+                    writer->write(const_data_offset);
+                } else if (encoding == FaceEncoding::Tiled ||
+                           encoding == FaceEncoding::TiledReduced) {
                     auto tiles_data =
                         (encoding == FaceEncoding::Tiled)
                             ? get_tiled_data<PtexReader::TiledFace>(
