@@ -2,6 +2,7 @@
 
 #include <glog/logging.h>
 
+#include "messages/compressed.h"
 #include "messages/lite.h"
 
 using namespace std;
@@ -239,7 +240,7 @@ ExpandedPtex::ExpandedPtex(const std::string &path)
 }
 
 ExpandedPtex::ExpandedPtex(const char *data, const size_t data_len)
-    : ExpandedPtex(make_unique<LiteRecordReader>(data, data_len).get()) {}
+    : ExpandedPtex(RecordReader::get(data, data_len).get()) {}
 
 void ExpandedPtex::TiledFace::getPixel(int u, int v, void *result) {
     const int tileu = u >> _tileres.ulog2;
