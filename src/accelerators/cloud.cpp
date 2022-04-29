@@ -244,12 +244,7 @@ void CloudBVH::loadTreeletBase(const uint32_t root_id, const char *buffer,
         length = treelet_buffer.length();
     }
 
-    unique_ptr<RecordReader> reader;
-    if (*reinterpret_cast<const uint32_t *>(buffer) == 0x184D2204) {
-        reader = make_unique<CompressedReader>(buffer, length);
-    } else {
-        reader = make_unique<LiteRecordReader>(buffer, length);
-    }
+    auto reader = RecordReader::get(buffer, length);
 
     /* read in the textures & materials included in this treelet */
 

@@ -26,15 +26,8 @@ bool is_material_treelet(const uint32_t treelet_id) {
 
     string treelet_buffer = roost::read_file(treelet_path);
 
-    unique_ptr<RecordReader> reader;
-    if (*reinterpret_cast<const uint32_t *>(treelet_buffer.data()) ==
-        0x184D2204) {
-        reader = make_unique<CompressedReader>(treelet_buffer.data(),
-                                               treelet_buffer.size());
-    } else {
-        reader = make_unique<LiteRecordReader>(treelet_buffer.data(),
-                                               treelet_buffer.size());
-    }
+    auto reader =
+        RecordReader::get(treelet_buffer.data(), treelet_buffer.size());
 
     const uint32_t included_image_partitions = reader->read<uint32_t>();
 

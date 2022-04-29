@@ -94,15 +94,8 @@ void load_all_textures(const string &treelet_path,
     treelet_buffer.resize(size);
     fin.read(treelet_buffer.data(), size);
 
-    unique_ptr<RecordReader> reader;
-    if (*reinterpret_cast<const uint32_t *>(treelet_buffer.data()) ==
-        0x184D2204) {
-        reader = make_unique<CompressedReader>(treelet_buffer.data(),
-                                               treelet_buffer.size());
-    } else {
-        reader = make_unique<LiteRecordReader>(treelet_buffer.data(),
-                                               treelet_buffer.size());
-    }
+    auto reader =
+        RecordReader::get(treelet_buffer.data(), treelet_buffer.size());
 
     reader->skip(reader->read<uint32_t>());
 

@@ -54,15 +54,8 @@ void print_treelet_info(const uint32_t treelet_id) {
     treelet_buffer.resize(size);
     fin.read(treelet_buffer.data(), size);
 
-    unique_ptr<RecordReader> reader;
-    if (*reinterpret_cast<const uint32_t*>(treelet_buffer.data()) ==
-        0x184D2204) {
-        reader = make_unique<CompressedReader>(treelet_buffer.data(),
-                                               treelet_buffer.size());
-    } else {
-        reader = make_unique<LiteRecordReader>(treelet_buffer.data(),
-                                               treelet_buffer.size());
-    }
+    auto reader =
+        RecordReader::get(treelet_buffer.data(), treelet_buffer.size());
 
     map<string, size_t> tex_sizes;
     map<uint32_t, string> stex_texs, ftex_texs;

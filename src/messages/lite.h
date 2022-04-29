@@ -2,6 +2,7 @@
 #define PBRT_MESSAGES_LITE_H
 
 #include <fstream>
+#include <memory>
 #include <stdexcept>
 #include <string>
 
@@ -19,6 +20,9 @@ class RecordReader {
     void read(T* t) {
         read(reinterpret_cast<char*>(t), sizeof(T));
     }
+
+    static std::unique_ptr<RecordReader> get(const char* buffer,
+                                             const size_t buffer_len);
 };
 
 class LiteRecordReader : public RecordReader {

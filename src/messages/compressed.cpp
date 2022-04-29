@@ -106,3 +106,13 @@ void CompressedReader::read(char* dst, size_t dst_len) {
                             to_string(rec_len) + ")");
     }
 }
+
+unique_ptr<RecordReader> RecordReader::get(const char* buffer,
+                                           const size_t buffer_len) {
+    if (buffer_len >= sizeof(uint32_t) &&
+        *reinterpret_cast<const uint32_t*>(buffer) == 0x184D2204) {
+        return make_unique<CompressedReader>(buffer, buffer_len);
+    }
+
+    return make_unique<LiteRecordReader>(buffer, buffer_len);
+}
