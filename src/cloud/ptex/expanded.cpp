@@ -166,6 +166,19 @@ ExpandedPtex::ExpandedPtex(RecordReader *reader) {
         _faces.emplace_back();
         auto &face_all = _faces.back();
 
+        if (face_info.isConstant() || face_info.res == 0) {
+            FaceEncoding face_encoding;
+            int offset;
+
+            reader->read(&face_encoding);
+            CHECK_EQ(face_encoding, FaceEncoding::ConstDataPtr);
+
+            face_all.emplace_back(
+                make_face(face_encoding, face_info.res, reader));
+
+            continue;
+        }
+
         for (int8_t res_u = face_info.res.ulog2; res_u >= 0; res_u--) {
             for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
                 FaceEncoding face_encoding;
@@ -279,7 +292,20 @@ void ExpandedPtex::dump(const std::string &output, PtexReader &ptex) {
             throw runtime_error("unsupported face resolution");
         }
 
-        bool highest_res_processed = false;
+        if (face_info.isConstant() || face_info.res == 0) {
+            // in this case, we just need to store the const data offset
+            PtexFaceData *raw_data = ptex.getData(i);
+            auto data = get_data(raw_data, ptex.pixelsize());
+            const int const_data_offset =
+                reinterpret_cast<const char *>(data.data_ptr) -
+                reinterpret_cast<const char *>(ptex.getConstData());
+
+            CHECK_GE(const_data_offset, 0) << "negative const data offset";
+
+            writer->write(FaceEncoding::ConstDataPtr);
+            writer->write(const_data_offset);
+            continue;
+        }
 
         for (int8_t res_u = face_info.res.ulog2; res_u >= 0; res_u--) {
             for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
@@ -287,25 +313,20 @@ void ExpandedPtex::dump(const std::string &output, PtexReader &ptex) {
                 PtexFaceData *raw_data = ptex.getData(i, new_res);
                 const auto encoding = get_face_encoding(raw_data);
 
-                if (not highest_res_processed) {
-                    CHECK_EQ((encoding == FaceEncoding::Constant ||
-                              encoding == FaceEncoding::ConstDataPtr) &&
-                                 (res_u != 0 or res_v != 0),
-                             false);
-                    highest_res_processed = true;
-                }
-
                 CHECK(raw_data->res() == new_res) << "resolution mismatch";
 
                 if (encoding == FaceEncoding::ConstDataPtr) {
+                    CHECK(new_res == 0);
+
                     auto data = get_data(raw_data, ptex.pixelsize());
                     const int const_data_offset =
                         reinterpret_cast<const char *>(data.data_ptr) -
                         reinterpret_cast<const char *>(ptex.getConstData());
 
-                    CHECK_GE(const_data_offset, 0) << "negative offset";
+                    CHECK_GE(const_data_offset, 0)
+                        << "negative const data offset";
 
-                    writer->write(data.encoding);
+                    writer->write(encoding);
                     writer->write(new_res);
                     writer->write(const_data_offset);
                 } else if (encoding == FaceEncoding::Tiled ||
@@ -419,6 +440,10 @@ PtexFaceData *ExpandedPtex::getData(int faceid, Res res) {
             throw runtime_error(
                 "anisotropic reductions are not supported for triangle mesh");
         }
+    }
+
+    if (fi.isConstant() || fi.res == 0) {
+        return _faces[faceid].front().get();
     }
 
     // let's compute the index for this reduction
