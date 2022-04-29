@@ -14,9 +14,11 @@
 #include <PtexReader.h>
 // clang-format on
 
+class RecordReader;
+
 namespace pbrt {
 
-class ExpandedPtex : public PtexTexture {
+class ExpandedPtex : public Ptex::PtexTexture {
   protected:
     virtual ~ExpandedPtex() {}
 
@@ -82,9 +84,11 @@ class ExpandedPtex : public PtexTexture {
         virtual void getPixel(int u, int v, void* result);
     };
 
+    ExpandedPtex(RecordReader* reader);
+
   public:
-    ExpandedPtex(const std::string& path, const char* data,
-                 const size_t data_len);
+    ExpandedPtex(const std::string& path);
+    ExpandedPtex(const char* data, const size_t data_len);
 
     static void dump(const std::string& output, Ptex::PtexReader& ptex);
 
@@ -119,7 +123,7 @@ class ExpandedPtex : public PtexTexture {
                           int firstchan, int nchannels, Ptex::Res res);
 
   private:
-    std::string _path;
+    std::string _path{};
 
     Info _i{};
     int _psize{};

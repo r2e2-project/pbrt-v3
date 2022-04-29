@@ -113,18 +113,15 @@ ostream &operator<<(ostream &os, const FaceEncoding &fe) {
     return os;
 }
 
-ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
-                           const size_t texture_data_len)
-    : _path(path) {
-    LiteRecordReader reader{texture_data, texture_data_len};
-    reader.read(&_i);
-    reader.read(&_psize);
+ExpandedPtex::ExpandedPtex(RecordReader *reader) {
+    reader->read(&_i);
+    reader->read(&_psize);
 
     _error_pixel.resize(_psize);
     _faceinfo.resize(_i.numFaces);
 
-    reader.read(reinterpret_cast<char *>(_faceinfo.data()),
-                _i.numFaces * sizeof(_faceinfo[0]));
+    reader->read(reinterpret_cast<char *>(_faceinfo.data()),
+                 _i.numFaces * sizeof(_faceinfo[0]));
 
     auto make_face = [this](const FaceEncoding encoding, Res face_res,
                             auto &reader) {
@@ -136,15 +133,15 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
         case FaceEncoding::Constant:
             face = new ConstantFace(_psize);
             face_data_len = _psize;
-            reader.read(reinterpret_cast<char *>(face->getData()),
-                        face_data_len);
+            reader->read(reinterpret_cast<char *>(face->getData()),
+                         face_data_len);
             break;
 
         case FaceEncoding::Packed:
             face = new PackedFace(face_res, _psize);
             face_data_len = _psize * face_res.u() * face_res.v();
-            reader.read(reinterpret_cast<char *>(face->getData()),
-                        face_data_len);
+            reader->read(reinterpret_cast<char *>(face->getData()),
+                         face_data_len);
             break;
 
         default:
@@ -164,8 +161,8 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
             for (int8_t res_v = face_info.res.vlog2; res_v >= 0; res_v--) {
                 FaceEncoding face_encoding;
                 Res face_res;
-                reader.read(&face_encoding);
-                reader.read(&face_res);
+                reader->read(&face_encoding);
+                reader->read(&face_res);
 
                 face_all.emplace_back(nullptr);
                 auto &face = face_all.back();
@@ -183,7 +180,7 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
                 case FaceEncoding::Tiled:
                 case FaceEncoding::TiledReduced: {
                     Res tile_res;
-                    reader.read(&tile_res);
+                    reader->read(&tile_res);
 
                     const int ntiles_u = face_res.ntilesu(tile_res);
                     const int ntiles_v = face_res.ntilesv(tile_res);
@@ -195,8 +192,8 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
                     for (int i = 0; i < ntiles; i++) {
                         FaceEncoding tface_enc;
                         Res tface_res;
-                        reader.read(&tface_enc);
-                        reader.read(&tface_res);
+                        reader->read(&tface_enc);
+                        reader->read(&tface_res);
 
                         tface->setTile(make_face(tface_enc, tface_res, reader),
                                        i);
@@ -211,6 +208,14 @@ ExpandedPtex::ExpandedPtex(const string &path, const char *texture_data,
         }
     }
 }
+
+ExpandedPtex::ExpandedPtex(const std::string &path)
+    : ExpandedPtex(make_unique<FileRecordReader>(path).get()) {
+    _path = path;
+}
+
+ExpandedPtex::ExpandedPtex(const char *data, const size_t data_len)
+    : ExpandedPtex(make_unique<LiteRecordReader>(data, data_len).get()) {}
 
 void ExpandedPtex::TiledFace::getPixel(int u, int v, void *result) {
     const int tileu = u >> _tileres.ulog2;
