@@ -67,6 +67,10 @@ FaceData get_data(PtexFaceData *raw_data, const int psize) {
         auto data = dynamic_cast<PtexReader::ConstDataPtr *>(raw_data);
         return {encoding, data->getData(), psize, raw_data->res()};
     }
+    case FaceEncoding::Constant: {
+        auto data = dynamic_cast<PtexReader::ConstantFace *>(raw_data);
+        return {encoding, data->getData(), psize, raw_data->res()};
+    }
     case FaceEncoding::Packed: {
         auto data = dynamic_cast<PtexReader::PackedFace *>(raw_data);
         return {encoding, data->getData(),
