@@ -45,6 +45,8 @@ int main(int argc, char *argv[]) {
 
     LOG(WARNING) << boolalpha << endl
                  << "* Texture info: " << endl
+                 << "  - Path      = " << ptex_file << endl
+                 << "  - Output    = " << output_file << endl
                  << "  - Size      = "
                  << pbrt::format_bytes(pbrt::roost::file_size(ptex_file))
                  << endl
