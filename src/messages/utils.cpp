@@ -538,10 +538,6 @@ protobuf::InfiniteLight infinite_light::to_protobuf(
         throw runtime_error("only for infinite lights with envrionment maps");
     }
 
-    if (!HasExtension(texmap, ".png")) {
-        throw runtime_error("only PNG environment maps are supported");
-    }
-
     protobuf::EnvironmentMap proto_envmap;
 
     constexpr size_t MAX_PARTITION_SIZE = 1024 * 1024 * 1024; /* 1 GB */
