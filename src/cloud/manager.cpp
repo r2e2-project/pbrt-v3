@@ -46,6 +46,36 @@ map<MaterialType, MaterialBlueprint> SceneManager::MaterialBlueprints = {
          {typeid(Float), "uroughness", true},
          {typeid(Float), "vroughness", true},
          {typeid(bool), "remaproughness", true},
+     }}},
+    {MaterialType::Glass,
+     {{
+         {typeid(Spectrum), "Kr", true},
+         {typeid(Spectrum), "Kt", true},
+         {typeid(Float), "eta", true},
+         {typeid(Float), "uroughness", true},
+         {typeid(Float), "vroughness", true},
+         {typeid(bool), "remaproughness", false},
+     }}},
+    {MaterialType::Substrate,
+     {{
+         {typeid(Spectrum), "Kd", true},
+         {typeid(Spectrum), "Ks", true},
+         {typeid(Float), "uroughness", true},
+         {typeid(Float), "vroughness", true},
+         {typeid(bool), "remaproughness", false},
+     }}},
+    {MaterialType::Uber,
+     {{
+         {typeid(Spectrum), "Kd", true},
+         {typeid(Spectrum), "Ks", true},
+         {typeid(Spectrum), "Kr", true},
+         {typeid(Spectrum), "Kt", true},
+         {typeid(Float), "roughness", true},
+         {typeid(Float), "uroughness", true},
+         {typeid(Float), "vroughness", true},
+         {typeid(Float), "eta", true},
+         {typeid(Spectrum), "opacity", true},
+         {typeid(bool), "remaproughness", false},
      }}}};
 
 ParamSet MaterialBlueprint::FilterParamSet(const ParamSet& src) {
