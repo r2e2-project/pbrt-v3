@@ -75,7 +75,7 @@ shared_ptr<ProxyDumpBVH> CreateProxyDumpBVH(vector<shared_ptr<Primitive>> prims,
                 travAlgoName.c_str());
     }
 
-    string partAlgoName = ps.FindOneString("partition", "topological");
+    string partAlgoName = ps.FindOneString("partition", "nvidia");
     ProxyDumpBVH::PartitionAlgorithm partAlgo;
     if (partAlgoName == "topological")
         partAlgo = ProxyDumpBVH::PartitionAlgorithm::Topological;

@@ -94,7 +94,7 @@ shared_ptr<TreeletDumpBVH> CreateTreeletDumpBVH(
                 travAlgoName.c_str());
     }
 
-    string partAlgoName = ps.FindOneString("partition", "onebyone");
+    string partAlgoName = ps.FindOneString("partition", "nvidia");
     TreeletDumpBVH::PartitionAlgorithm partAlgo;
     if (partAlgoName == "onebyone")
         partAlgo = TreeletDumpBVH::PartitionAlgorithm::OneByOne;
