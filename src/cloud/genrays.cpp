@@ -3,32 +3,18 @@
 #include <string>
 #include <vector>
 
-#include "cloud/manager.h"
-#include "pbrt/main.h"
 #include "core/camera.h"
 #include "core/geometry.h"
 #include "core/transform.h"
 #include "messages/utils.h"
+#include "pbrt/main.h"
 #include "util/exception.h"
 
 using namespace std;
 using namespace pbrt;
 
-void usage(const char *argv0) { cerr << argv0 << " SCENE-DATA OUTPUT" << endl; }
-
-shared_ptr<Camera> loadCamera(const string &scenePath,
-                              vector<unique_ptr<Transform>> &transformCache) {
-    auto reader = global::manager.GetReader(ObjectType::Camera);
-    protobuf::Camera proto_camera;
-    reader->read(&proto_camera);
-    return camera::from_protobuf(proto_camera, transformCache);
-}
-
-shared_ptr<GlobalSampler> loadSampler(const string &scenePath) {
-    auto reader = global::manager.GetReader(ObjectType::Sampler);
-    protobuf::Sampler proto_sampler;
-    reader->read(&proto_sampler);
-    return sampler::from_protobuf(proto_sampler);
+void usage(const char *argv0) {
+    cerr << argv0 << " SCENE-DATA OUTPUT [SPP]" << endl;
 }
 
 int main(int argc, char const *argv[]) {
@@ -37,43 +23,34 @@ int main(int argc, char const *argv[]) {
             abort();
         }
 
-        if (argc != 3) {
+        if (argc < 3) {
             usage(argv[0]);
             return EXIT_FAILURE;
         }
 
         const string scenePath{argv[1]};
         const string outputPath{argv[2]};
+        int spp = 0;
 
-        global::manager.init(scenePath);
+        if (argc == 4) {
+            spp = stoi(argv[3]);
+        }
 
-        vector<unique_ptr<Transform>> transformCache;
-        shared_ptr<GlobalSampler> sampler = loadSampler(scenePath);
-        shared_ptr<Camera> camera = loadCamera(scenePath, transformCache);
-
-        const Bounds2i sampleBounds = camera->film->GetSampleBounds();
-        const Vector2i sampleExtent = sampleBounds.Diagonal();
-        const auto samplesPerPixel = sampler->samplesPerPixel;
-        const uint8_t maxDepth = 5;
-        const float rayScale = 1 / sqrt((Float)sampler->samplesPerPixel);
-
-        protobuf::RecordWriter rayWriter{outputPath};
+        pbrt::SceneBase scene = pbrt::LoadSceneBase(scenePath, spp);
+        scene.SetPathDepth(5);
 
         /* Generate all the samples */
+        protobuf::RecordWriter rayWriter{outputPath};
         size_t sampleCount = 0;
 
         char rayBuffer[sizeof(RayState)];
 
-        for (size_t sample = 0; sample < sampler->samplesPerPixel; sample++) {
-            for (Point2i pixel : sampleBounds) {
-                sampleCount++;
-                if (!InsideExclusive(pixel, sampleBounds)) continue;
-
-                RayStatePtr statePtr = graphics::GenerateCameraRay(
-                    camera, pixel, sample, maxDepth, sampleExtent, sampler);
-
-                const auto len = statePtr->Serialize(rayBuffer);
+        for (size_t sample = 0; sample < scene.SamplesPerPixel(); sample++) {
+            for (Point2i pixel : scene.SampleBounds()) {
+                auto ray = scene.GenerateCameraRay(pixel, sample);
+                const auto len = ray->Serialize(rayBuffer);
                 rayWriter.write(rayBuffer + 4, len - 4);
+                sampleCount++;
             }
         }
 

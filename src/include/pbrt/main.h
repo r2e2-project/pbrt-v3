@@ -1,12 +1,9 @@
 #ifndef PBRT_INCLUDE_MAIN_H
 #define PBRT_INCLUDE_MAIN_H
 
-#include <cstdint>
-#include <istream>
 #include <map>
 #include <memory>
 #include <set>
-#include <tuple>
 #include <vector>
 
 #include "common.h"
@@ -14,6 +11,7 @@
 #include "light.h"
 #include "pbrt.h"
 #include "raystate.h"
+#include "scene.h"
 #include "transform.h"
 
 namespace pbrt {
@@ -24,6 +22,67 @@ class CloudBVH;
 class Sample;
 class RayState;
 using RayStatePtr = std::unique_ptr<RayState>;
+
+struct ProcessRayOutput {
+    uint64_t pathId{0};
+    std::array<RayStatePtr, 3> rays{nullptr, nullptr, nullptr};
+    RayStatePtr sample{};
+    bool pathFinished{false};
+};
+
+class SceneBase {
+  public:
+    SceneBase() {}
+    SceneBase(const std::string &path, const int samplesPerPixel);
+
+    RayStatePtr GenerateCameraRay(const Point2i &pixel, const uint32_t sample);
+    void AccumulateImage(const std::vector<Sample> &rays);
+    void WriteImage(const std::string &filename = {});
+    void ProcessRay(RayStatePtr &&ray, const CloudBVH &treelet,
+                    MemoryArena &arena, ProcessRayOutput &output);
+
+    std::set<ObjectKey> &TreeletDependencies(const TreeletId treeletId);
+    size_t TreeletCount() const { return treeletDependencies.size(); }
+    size_t MaxPathDepth() const { return maxPathDepth; }
+    int SamplesPerPixel() const { return samplesPerPixel; }
+    const Bounds2i &SampleBounds() const { return sampleBounds; }
+    std::shared_ptr<pbrt::Camera> &Camera() { return camera; }
+
+    void SetPathDepth(const size_t d) { maxPathDepth = d; }
+
+    SceneBase(SceneBase &&) = default;
+    SceneBase &operator=(SceneBase &&) = default;
+    SceneBase &operator=(const SceneBase &) = delete;
+
+  private:
+    std::vector<std::set<ObjectKey>> treeletDependencies{};
+    Transform identityTransform;
+
+    std::shared_ptr<pbrt::Camera> camera{};
+    std::shared_ptr<GlobalSampler> sampler{};
+    std::vector<std::unique_ptr<Transform>> transformCache{};
+    std::unique_ptr<Scene> fakeScene{};
+
+    std::vector<std::shared_ptr<TriangleMesh>> areaLightMeshes{};
+    std::vector<std::shared_ptr<Shape>> areaLightShapes{};
+
+    int samplesPerPixel{};
+    Bounds2i sampleBounds{};
+    Vector2i sampleExtent{};
+    size_t totalPaths{0};
+    size_t maxPathDepth{5};
+};
+
+std::string GetObjectName(const ObjectType type, const uint32_t id);
+SceneBase LoadSceneBase(const std::string &path, const int samplesPerPixel);
+
+std::shared_ptr<CloudBVH> LoadTreelet(const std::string &path,
+                                      const TreeletId treeletId,
+                                      const char *buffer = nullptr,
+                                      const size_t length = 0);
+
+void DumpSceneObjects(const std::string &description,
+                      const std::string outputPath);
 
 struct AccumulatedStats {
     std::map<std::string, int64_t> counters{};
@@ -41,84 +100,6 @@ struct AccumulatedStats {
 
     void Merge(const AccumulatedStats &other);
 };
-
-namespace scene {
-
-class Base {
-  private:
-    std::vector<std::set<ObjectKey>> treeletDependencies{};
-    Transform identityTransform;
-
-  public:
-    std::shared_ptr<Camera> camera{};
-    std::shared_ptr<GlobalSampler> sampler{};
-    std::vector<std::unique_ptr<Transform>> transformCache{};
-    std::unique_ptr<Scene> fakeScene{};
-
-    std::vector<std::shared_ptr<TriangleMesh>> areaLightMeshes{};
-    std::vector<std::shared_ptr<Shape>> areaLightShapes{};
-
-    int samplesPerPixel;
-    pbrt::Bounds2i sampleBounds{};
-    pbrt::Vector2i sampleExtent{};
-    size_t totalPaths{0};
-    size_t maxPathDepth{5};
-
-    Base();
-
-    Base(Base &&);
-    Base &operator=(Base &&);
-
-    Base(const std::string &path, const int samplesPerPixel);
-    ~Base();
-
-    std::set<ObjectKey> &GetTreeletDependencies(const TreeletId treeletId) {
-        return treeletDependencies.at(treeletId);
-    }
-
-    size_t GetTreeletCount() const { return treeletDependencies.size(); }
-};
-
-std::string GetObjectName(const ObjectType type, const uint32_t id);
-
-Base LoadBase(const std::string &path, const int samplesPerPixel);
-
-std::shared_ptr<CloudBVH> LoadTreelet(const std::string &path,
-                                      const TreeletId treeletId,
-                                      const char *buffer = nullptr,
-                                      const size_t length = 0);
-
-void DumpSceneObjects(const std::string &description,
-                      const std::string outputPath);
-
-}  // namespace scene
-
-namespace graphics {
-
-struct ProcessRayOutput {
-    uint64_t pathId{0};
-    std::array<RayStatePtr, 3> rays{nullptr, nullptr, nullptr};
-    RayStatePtr sample{};
-    bool pathFinished{false};
-};
-
-void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
-                scene::Base &sceneBase, MemoryArena &arena,
-                ProcessRayOutput &output);
-
-RayStatePtr GenerateCameraRay(const std::shared_ptr<Camera> &camera,
-                              const Point2<int> &pixel,
-                              const uint32_t sample_num, const uint8_t maxDepth,
-                              const Vector2<int> &sampleExtent,
-                              std::shared_ptr<GlobalSampler> &sampler);
-
-void AccumulateImage(const std::shared_ptr<Camera> &camera,
-                     const std::vector<Sample> &rays);
-
-void WriteImage(const std::shared_ptr<Camera> &camera,
-                const std::string &filename = {});
-
-}  // namespace graphics
 
 namespace stats {
 

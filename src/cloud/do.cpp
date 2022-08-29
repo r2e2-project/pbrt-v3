@@ -32,26 +32,20 @@ int main(int argc, char const *argv[]) {
         FLAGS_log_prefix = false;
         google::InitGoogleLogging(argv[0]);
 
-        /* CloudBVH requires this */
-        PbrtOptions.nThreads = 1;
-
         const string scenePath{argv[1]};
         const string raysPath{argv[2]};
 
-        pbrt::scene::Base sceneBase = pbrt::scene::LoadBase(scenePath, 0);
-        sceneBase.maxPathDepth = 5;
+        pbrt::SceneBase scene = pbrt::LoadSceneBase(scenePath, 0);
 
         /* prepare the scene */
         MemoryArena arena;
-        vector<unique_ptr<CloudBVH>> treelets;
-        treelets.resize(sceneBase.GetTreeletCount());
+        vector<shared_ptr<CloudBVH>> treelets;
 
         /* let's load all the treelets */
-        for (size_t i = 0; i < treelets.size(); i++) {
-            cout << "Loading treelet " << i << "... ";
-            treelets[i] = make_unique<CloudBVH>(i, false);
-            treelets[i]->LoadTreelet(i);
-            cout << "done." << endl;
+        for (size_t i = 0; i < scene.TreeletCount(); i++) {
+            cerr << "Loading treelet " << i << "... ";
+            treelets.push_back(pbrt::LoadTreelet(scenePath, i));
+            cerr << "done." << endl;
         }
 
         queue<RayStatePtr> rayList;
@@ -81,10 +75,9 @@ int main(int argc, char const *argv[]) {
             RayStatePtr theRayPtr = move(rayList.front());
             rayList.pop();
 
-            graphics::ProcessRayOutput processOutput;
-            graphics::ProcessRay(move(theRayPtr),
-                                 *treelets[theRayPtr->CurrentTreelet()],
-                                 sceneBase, arena, processOutput);
+            ProcessRayOutput processOutput;
+            auto &treelet = *treelets[theRayPtr->CurrentTreelet()];
+            scene.ProcessRay(move(theRayPtr), treelet, arena, processOutput);
 
             for (auto &r : processOutput.rays) {
                 if (r) rayList.push(move(r));
@@ -93,26 +86,18 @@ int main(int argc, char const *argv[]) {
             if (processOutput.sample) {
                 samples.emplace_back(*processOutput.sample);
             }
-        }
 
-        map<pair<float, float>, pbrt::Sample> newSamples;
-
-        for (auto &s : samples) {
-            const auto key = make_pair(s.pFilm.x, s.pFilm.y);
-            if (newSamples.count(key)) {
-                newSamples[make_pair(s.pFilm.x, s.pFilm.y)].L += s.L;
-            } else {
-                newSamples.emplace(make_pair(s.pFilm.x, s.pFilm.y), move(s));
+            if (samples.size() > 1000) {
+                scene.AccumulateImage(samples);
+                samples.clear();
             }
         }
 
-        vector<Sample> n;
-        for (auto &s : newSamples) {
-            n.push_back(move(s.second));
+        if (not samples.empty()) {
+            scene.AccumulateImage(samples);
         }
 
-        graphics::AccumulateImage(sceneBase.camera, n);
-        sceneBase.camera->film->WriteImage();
+        scene.WriteImage();
     } catch (const exception &e) {
         print_exception(argv[0], e);
         return EXIT_FAILURE;

@@ -2254,8 +2254,6 @@ Camera *RenderOptions::MakeCamera() const {
     return camera;
 }
 
-namespace scene {
-
 void DumpSceneObjects(const std::string &description,
                       const std::string outputPath) {
     Options opts;
@@ -2300,7 +2298,5 @@ void DumpSceneObjects(const std::string &description,
 
     pbrtCleanup();
 }
-
-}  // namespace scene
 
 }  // namespace pbrt

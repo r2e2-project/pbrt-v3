@@ -94,20 +94,11 @@ void AccumulatedStats::Merge(const AccumulatedStats &other) {
     }
 }
 
-namespace scene {
-
 string GetObjectName(const ObjectType type, const uint32_t id) {
     return SceneManager::getFileName(type, id);
 }
 
-Base::Base() {}
-
-Base::~Base() {}
-
-Base::Base(Base &&) = default;
-Base &Base::operator=(Base &&) = default;
-
-Base::Base(const std::string &path, const int samplesPerPixel) {
+SceneBase::SceneBase(const std::string &path, const int samplesPerPixel) {
     using namespace pbrt::global;
 
     PbrtOptions.nThreads = 1;
@@ -209,7 +200,7 @@ Base::Base(const std::string &path, const int samplesPerPixel) {
     totalPaths = sampleBounds.Area() * sampler->samplesPerPixel;
 }
 
-Base LoadBase(const std::string &path, const int samplesPerPixel) {
+SceneBase LoadSceneBase(const std::string &path, const int samplesPerPixel) {
     return {path, samplesPerPixel};
 }
 
@@ -222,13 +213,12 @@ shared_ptr<CloudBVH> LoadTreelet(const string &path, const TreeletId treeletId,
     return treelet;
 }
 
-}  // namespace scene
+set<ObjectKey> &SceneBase::TreeletDependencies(const TreeletId treeletId) {
+    return treeletDependencies.at(treeletId);
+}
 
-namespace graphics {
-
-void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
-                scene::Base &sceneBase, MemoryArena &arena,
-                ProcessRayOutput &output) {
+void SceneBase::ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
+                           MemoryArena &arena, ProcessRayOutput &output) {
     auto _ = defer([start_time = chrono::steady_clock::now()] {
         const auto end_time = chrono::steady_clock::now();
         totalProcessTime +=
@@ -253,10 +243,9 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
     } else if (r.HasHit()) {
         RayStatePtr bounceRay, shadowRay, lightRay;
 
-        tie(bounceRay, shadowRay, lightRay) = CloudIntegrator::Shade(
-            move(rayStatePtr), treelet, *sceneBase.fakeScene,
-            sceneBase.sampleExtent, sceneBase.sampler, sceneBase.maxPathDepth,
-            arena);
+        tie(bounceRay, shadowRay, lightRay) =
+            CloudIntegrator::Shade(move(rayStatePtr), treelet, *fakeScene,
+                                   sampleExtent, sampler, maxPathDepth, arena);
 
         if (!bounceRay and !shadowRay) {
             output.pathFinished = true;
@@ -274,7 +263,7 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
 
         if ((r.IsShadowRay() and r.remainingBounces == 0) ||
             (not r.IsShadowRay() and not r.IsLightRay() and
-             r.remainingBounces == sceneBase.maxPathDepth - 1)) {
+             r.remainingBounces == maxPathDepth - 1)) {
             output.pathFinished = true;
         }
 
@@ -320,12 +309,12 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
 
                 if (aLight == sLight) {
                     Li = dynamic_cast<AreaLight *>(
-                             sceneBase.fakeScene->lights[aLight - 1].get())
+                             fakeScene->lights[aLight - 1].get())
                              ->L(ray.hitInfo.isect,
                                  -ray.lightRayInfo.sampledDirection);
                 }
             } else {
-                auto &l = sceneBase.fakeScene->lights[sLight - 1];
+                auto &l = fakeScene->lights[sLight - 1];
                 if (l->GetType() != LightType::PartitionedInfinite) {
                     Li = l->Le(ray.ray);
                 } else {
@@ -357,8 +346,8 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
         ray.Ld = 0.f;
 
         bool sampleDone = true;
-        if (ray.remainingBounces == sceneBase.maxPathDepth - 1) {
-            for (const auto &light : sceneBase.fakeScene->infiniteLights) {
+        if (ray.remainingBounces == maxPathDepth - 1) {
+            for (const auto &light : fakeScene->infiniteLights) {
                 if (light->GetType() == LightType::PartitionedInfinite) {
                     ray.Ld = 1.f;
 
@@ -394,12 +383,12 @@ void ProcessRay(RayStatePtr &&rayStatePtr, const CloudBVH &treelet,
     }
 }
 
-RayStatePtr GenerateCameraRay(const shared_ptr<Camera> &camera,
-                              const Point2i &pixel, const uint32_t sample,
-                              const uint8_t maxDepth,
-                              const Vector2i &sampleExtent,
-                              shared_ptr<GlobalSampler> &sampler) {
-    const auto samplesPerPixel = sampler->samplesPerPixel;
+RayStatePtr SceneBase::GenerateCameraRay(const Point2i &pixel,
+                                         const uint32_t sample) {
+    if (!InsideExclusive(pixel, sampleBounds)) {
+        return nullptr;
+    }
+
     const Float rayScale = 1 / sqrt((Float)samplesPerPixel);
 
     sampler->StartPixel(pixel);
@@ -417,7 +406,7 @@ RayStatePtr GenerateCameraRay(const shared_ptr<Camera> &camera,
     state.sample.weight =
         camera->GenerateRayDifferential(cameraSample, &state.ray);
     state.ray.ScaleDifferentials(rayScale);
-    state.remainingBounces = maxDepth - 1;
+    state.remainingBounces = maxPathDepth - 1;
     state.StartTrace();
 
     ++nCameraRays;
@@ -427,8 +416,7 @@ RayStatePtr GenerateCameraRay(const shared_ptr<Camera> &camera,
     return statePtr;
 }
 
-void AccumulateImage(const shared_ptr<Camera> &camera,
-                     const vector<Sample> &rays) {
+void SceneBase::AccumulateImage(const vector<Sample> &rays) {
     const Bounds2i sampleBounds = camera->film->GetSampleBounds();
     unique_ptr<FilmTile> filmTile = camera->film->GetFilmTile(sampleBounds);
 
@@ -439,14 +427,12 @@ void AccumulateImage(const shared_ptr<Camera> &camera,
     camera->film->MergeFilmTile(move(filmTile));
 }
 
-void WriteImage(const shared_ptr<Camera> &camera, const string &filename) {
+void SceneBase::WriteImage(const string &filename) {
     if (not filename.empty()) {
         camera->film->SetFilename(filename);
     }
 
     camera->film->WriteImage();
 }
-
-}  // namespace graphics
 
 }  // namespace pbrt
