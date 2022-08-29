@@ -28,6 +28,9 @@ int main(int argc, char const *argv[]) {
             return EXIT_FAILURE;
         }
 
+        FLAGS_log_prefix = false;
+        google::InitGoogleLogging(argv[0]);
+
         const string scenePath{argv[1]};
         const string outputPath{argv[2]};
         int spp = 0;
@@ -41,7 +44,7 @@ int main(int argc, char const *argv[]) {
 
         /* Generate all the samples */
         protobuf::RecordWriter rayWriter{outputPath};
-        size_t sampleCount = 0;
+        size_t rayCount = 0;
 
         char rayBuffer[sizeof(RayState)];
 
@@ -50,12 +53,12 @@ int main(int argc, char const *argv[]) {
                 auto ray = scene.GenerateCameraRay(pixel, sample);
                 const auto len = ray->Serialize(rayBuffer);
                 rayWriter.write(rayBuffer + 4, len - 4);
-                sampleCount++;
+                rayCount++;
             }
         }
 
-        cerr << sampleCount << " sample(s) were generated and written to "
-             << outputPath << endl;
+        cerr << rayCount << " rays(s) were generated and written to "
+             << outputPath << '.' << endl;
     } catch (const exception &e) {
         print_exception(argv[0], e);
         return EXIT_FAILURE;
