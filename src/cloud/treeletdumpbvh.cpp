@@ -3242,26 +3242,6 @@ vector<uint32_t> TreeletDumpBVH::DumpTreelets(bool root) const {
                          ObjectType::Treelet, sTreeletID)));
     }
 
-    if (root) {
-        ofstream staticAllocOut(_manager.getScenePath() + "/STATIC0_pre");
-        for (const TreeletInfo &treelet : allTreelets) {
-            uint32_t sTreeletID = _manager.getId(&treelet);
-            staticAllocOut << sTreeletID << " " << treelet.totalProb << endl;
-        }
-
-        for (auto &kv : nonCopyableInstanceTreelets) {
-            const TreeletDumpBVH *inst = kv.first;
-            for (const TreeletInfo &treelet : inst->allTreelets) {
-                float instProb =
-                    instanceProbabilities[treelet.dirIdx][inst->instanceID];
-
-                uint32_t sTreeletID = _manager.getId(&treelet);
-                staticAllocOut << sTreeletID << " "
-                               << treelet.totalProb * instProb << endl;
-            }
-        }
-    }
-
     bool multiDir = false;
     for (const TreeletInfo &info : allTreelets) {
         if (info.dirIdx != 0) {
