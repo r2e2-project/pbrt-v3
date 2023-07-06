@@ -1,6 +1,7 @@
 #ifndef PBRT_CLOUD_TREELET_DUMP_BVH_H
 #define PBRT_CLOUD_TREELET_DUMP_BVH_H
 
+#include <array>
 #include <atomic>
 #include <memory>
 #include <set>
@@ -26,7 +27,7 @@ struct InstanceMask {
 
         return *this;
     }
-    
+
     friend InstanceMask operator|(InstanceMask l, const InstanceMask &r) {
         for (int i = 0; i < numInts; i++) {
             l.mask[i] |= r.mask[i];
@@ -139,7 +140,7 @@ class TreeletDumpBVH : public BVHAccel {
 
   private:
     struct TreeletInfo {
-        std::list<uint64_t> nodes {}; 
+        std::list<uint64_t> nodes {};
         InstanceMask instanceMask;
         std::vector<TreeletDumpBVH *> instances;
         uint64_t noInstanceSize {0};

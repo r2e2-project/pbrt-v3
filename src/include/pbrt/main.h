@@ -1,6 +1,7 @@
 #ifndef PBRT_INCLUDE_MAIN_H
 #define PBRT_INCLUDE_MAIN_H
 
+#include <array>
 #include <map>
 #include <memory>
 #include <set>

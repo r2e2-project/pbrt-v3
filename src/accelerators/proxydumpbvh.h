@@ -7,6 +7,7 @@
 #include "pbrt.h"
 #include "primitive.h"
 #include <atomic>
+#include <array>
 #include <memory>
 #include <set>
 #include <unordered_map>
@@ -84,7 +85,7 @@ class ProxyDumpBVH : public BVHAccel {
     using ProxySetPtr = const std::unordered_set<const ProxyBVH *> *;
   private:
     struct IntermediateTreeletInfo {
-        std::list<uint64_t> nodes {}; 
+        std::list<uint64_t> nodes {};
         ProxySetPtr proxies {nullptr};
         std::list<const ProxyBVH *> unsharedProxies {};
         uint64_t noProxySize {0};
@@ -95,7 +96,7 @@ class ProxyDumpBVH : public BVHAccel {
     };
 
     struct TreeletInfo {
-        std::list<uint64_t> nodes {}; 
+        std::list<uint64_t> nodes {};
         std::vector<const ProxyBVH *> proxies {};
         uint64_t noProxySize {0};
         uint64_t proxySize {0};
