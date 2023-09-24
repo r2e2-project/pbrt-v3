@@ -27,7 +27,7 @@ CompressedReader::CompressedReader(const char* buffer, const size_t buffer_len)
           return info;
       }()) {
     lz4frame_options_.stableDst = false;
-    memset(lz4frame_options_.reserved, 0, sizeof(lz4frame_options_.reserved));
+    // memset(lz4frame_options_.reserved, 0, sizeof(lz4frame_options_.reserved));
 }
 
 CompressedReader::~CompressedReader() {
